@@ -1,14 +1,14 @@
 # Group Report — Lab Day 08: RAG Pipeline
 
-**Nhóm:** ___________
+**Nhóm:** Nhóm 25
 **Ngày:** 2026-04-13
 **Thành viên:**
 | Tên | Vai trò |
 |-----|---------|
-| ___________ | Tech Lead |
-| ___________ | Retrieval Owner |
-| ___________ | Eval Owner |
-| ___________ | Documentation Owner |
+| Phạm Xuân Khang | Tech Lead |
+| Nguyễn Văn Thức | Retrieval Owner |
+| Phạm Thành Duy | Eval Owner |
+| Nguyễn Thị Thu Ngọc | Documentation Owner |
 
 ---
 
