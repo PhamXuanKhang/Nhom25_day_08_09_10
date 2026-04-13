@@ -199,7 +199,7 @@ Generation: GPT-4, grounded prompt
 | Faithfulness | 4.70/5 | Strong |
 | Relevance | 4.50/5 | Good |
 | Context Recall | 5.00/5 | Perfect |
-| Completeness | 4.10/5 | **Needs work** |
+| Completeness | 4.10/ 5 | **Needs work** |
 | Overall | **4.58/5** | Production-ready |
 
 **Path to 4.75+:**
