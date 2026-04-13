@@ -73,16 +73,20 @@ def preprocess_document(raw_text: str, filepath: str) -> Dict[str, Any]:
 
     for line in lines:
         if not header_done:
-            # TODO: Parse metadata từ các dòng "Key: Value"
-            # Ví dụ: "Source: policy/refund-v4.pdf" → metadata["source"] = "policy/refund-v4.pdf"
-            if line.startswith("Source:"):
-                metadata["source"] = line.replace("Source:", "").strip()
-            elif line.startswith("Department:"):
-                metadata["department"] = line.replace("Department:", "").strip()
-            elif line.startswith("Effective Date:"):
-                metadata["effective_date"] = line.replace("Effective Date:", "").strip()
-            elif line.startswith("Access:"):
-                metadata["access"] = line.replace("Access:", "").strip()
+            meta_match = re.match(
+                r"^(Source|Department|Effective Date|Access):\s*(.+)$",
+                line,
+            )
+            if meta_match:
+                key, val = meta_match.group(1), meta_match.group(2).strip()
+                if key == "Source":
+                    metadata["source"] = val
+                elif key == "Department":
+                    metadata["department"] = val
+                elif key == "Effective Date":
+                    metadata["effective_date"] = val
+                else:
+                    metadata["access"] = val
             elif line.startswith("==="):
                 # Gặp section heading đầu tiên → kết thúc header
                 header_done = True
@@ -95,9 +99,10 @@ def preprocess_document(raw_text: str, filepath: str) -> Dict[str, Any]:
 
     cleaned_text = "\n".join(content_lines)
 
-    # TODO: Thêm bước normalize text nếu cần
-    # Gợi ý: bỏ ký tự đặc biệt thừa, chuẩn hóa dấu câu
-    cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text)  # max 2 dòng trống liên tiếp
+    cleaned_text = re.sub(r"\r\n?", "\n", cleaned_text)
+    cleaned_text = re.sub(r"[ \t]+\n", "\n", cleaned_text)
+    cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text)
+    cleaned_text = cleaned_text.strip()
 
     return {
         "text": cleaned_text,
@@ -191,26 +196,71 @@ def _split_by_size(
             "metadata": {**base_metadata, "section": section},
         }]
 
-    # TODO: Implement split theo paragraph với overlap
-    # Gợi ý:
-    # paragraphs = text.split("\n\n")
-    # Ghép paragraphs lại cho đến khi gần đủ chunk_chars
-    # Lấy overlap từ đoạn cuối chunk trước
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = min(start + chunk_chars, len(text))
-        chunk_text = text[start:end]
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    pieces: List[str] = []
 
-        # TODO: Tìm ranh giới tự nhiên gần nhất (dấu xuống dòng, dấu chấm)
-        # thay vì cắt giữa câu
+    def flush_buf(buf: List[str]) -> None:
+        if buf:
+            pieces.append("\n\n".join(buf))
 
+    buf: List[str] = []
+    acc = 0
+    for para in paragraphs:
+        need = len(para) + (2 if buf else 0)
+        if acc + need <= chunk_chars:
+            buf.append(para)
+            acc += need
+            continue
+        flush_buf(buf)
+        buf = []
+        acc = 0
+        if len(para) <= chunk_chars:
+            buf = [para]
+            acc = len(para)
+        else:
+            start = 0
+            plen = len(para)
+            while start < plen:
+                end = min(start + chunk_chars, plen)
+                if end < plen:
+                    window = para[start:end]
+                    split_at = window.rfind("\n\n")
+                    adv = 2
+                    if split_at < chunk_chars // 3:
+                        split_at = window.rfind("\n")
+                        adv = 1
+                    if split_at < chunk_chars // 3:
+                        split_at = window.rfind(". ")
+                        adv = 2
+                    if split_at >= chunk_chars // 3:
+                        end = start + split_at + adv
+                piece = para[start:end].strip()
+                if piece:
+                    pieces.append(piece)
+                if end >= plen:
+                    break
+                start = max(end - overlap_chars, start + 1)
+
+    flush_buf(buf)
+
+    if not pieces:
+        return []
+
+    chunks: List[Dict[str, Any]] = []
+    prev = ""
+    for idx, body in enumerate(pieces):
+        if idx > 0:
+            tail = prev[-overlap_chars:] if len(prev) > overlap_chars else prev
+            nl = tail.find("\n")
+            if 0 < nl < len(tail) - 10:
+                tail = tail[nl + 1 :].lstrip()
+            body = f"{tail}\n\n{body}" if tail.strip() else body
+        body = body.strip()
         chunks.append({
-            "text": chunk_text,
+            "text": body,
             "metadata": {**base_metadata, "section": section},
         })
-        # Overlap: lùi lại overlap_chars để chunk sau có ngữ cảnh từ chunk trước
-        start = end - overlap_chars
+        prev = body
 
     return chunks
 
@@ -241,10 +291,28 @@ def get_embedding(text: str) -> List[float]:
         model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
         return model.encode(text).tolist()
     """
-    raise NotImplementedError(
-        "TODO: Implement get_embedding().\n"
-        "Chọn Option A (OpenAI) hoặc Option B (Sentence Transformers) trong TODO comment."
+    provider = (os.getenv("EMBEDDING_PROVIDER") or "openai").lower().strip()
+    if provider == "local":
+        from sentence_transformers import SentenceTransformer
+
+        if not hasattr(get_embedding, "_st_model"):
+            model_name = os.getenv(
+                "LOCAL_EMBEDDING_MODEL",
+                "paraphrase-multilingual-MiniLM-L12-v2",
+            )
+            get_embedding._st_model = SentenceTransformer(model_name)
+        return get_embedding._st_model.encode(text, normalize_embeddings=True).tolist()
+
+    from openai import OpenAI
+
+    if not hasattr(get_embedding, "_oa_client"):
+        get_embedding._oa_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    inp = text.replace("\n", " ")
+    resp = get_embedding._oa_client.embeddings.create(
+        input=inp,
+        model="text-embedding-3-small",
     )
+    return resp.data[0].embedding
 
 
 def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None:
@@ -274,9 +342,11 @@ def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None
     print(f"Đang build index từ: {docs_dir}")
     db_dir.mkdir(parents=True, exist_ok=True)
 
-    # TODO: Khởi tạo ChromaDB
-    # client = chromadb.PersistentClient(path=str(db_dir))
-    # collection = client.get_or_create_collection(...)
+    client = chromadb.PersistentClient(path=str(db_dir))
+    collection = client.get_or_create_collection(
+        name="rag_lab",
+        metadata={"hnsw:space": "cosine"},
+    )
 
     total_chunks = 0
     doc_files = list(docs_dir.glob("*.txt"))
@@ -289,32 +359,29 @@ def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None
         print(f"  Processing: {filepath.name}")
         raw_text = filepath.read_text(encoding="utf-8")
 
-        # TODO: Gọi preprocess_document
-        # doc = preprocess_document(raw_text, str(filepath))
-
-        # TODO: Gọi chunk_document
-        # chunks = chunk_document(doc)
-
-        # TODO: Embed và lưu từng chunk vào ChromaDB
-        # for i, chunk in enumerate(chunks):
-        #     chunk_id = f"{filepath.stem}_{i}"
-        #     embedding = get_embedding(chunk["text"])
-        #     collection.upsert(
-        #         ids=[chunk_id],
-        #         embeddings=[embedding],
-        #         documents=[chunk["text"]],
-        #         metadatas=[chunk["metadata"]],
-        #     )
-        # total_chunks += len(chunks)
-
-        # Placeholder để code không lỗi khi chưa implement
         doc = preprocess_document(raw_text, str(filepath))
         chunks = chunk_document(doc)
-        print(f"    → {len(chunks)} chunks (embedding chưa implement)")
-        total_chunks += len(chunks)
+
+        indexed = 0
+        for i, chunk in enumerate(chunks):
+            body = chunk["text"].strip()
+            if not body:
+                continue
+            chunk_id = f"{filepath.stem}_{i}"
+            embedding = get_embedding(body)
+            meta = {k: str(v) if v is not None else "" for k, v in chunk["metadata"].items()}
+            collection.upsert(
+                ids=[chunk_id],
+                embeddings=[embedding],
+                documents=[body],
+                metadatas=[meta],
+            )
+            indexed += 1
+        total_chunks += indexed
+        print(f"    → {indexed} chunks đã upsert (từ {len(chunks)} sau chunking)")
 
     print(f"\nHoàn thành! Tổng số chunks: {total_chunks}")
-    print("Lưu ý: Embedding chưa được implement. Xem TODO trong get_embedding() và build_index().")
+
 
 
 # =============================================================================
@@ -422,12 +489,12 @@ if __name__ == "__main__":
     print("\n--- Build Full Index ---")
     print("Lưu ý: Cần implement get_embedding() trước khi chạy bước này!")
     # Uncomment dòng dưới sau khi implement get_embedding():
-    # build_index()
+    build_index()
 
     # Bước 4: Kiểm tra index
     # Uncomment sau khi build_index() thành công:
-    # list_chunks()
-    # inspect_metadata_coverage()
+    list_chunks()
+    inspect_metadata_coverage()
 
     print("\nSprint 1 setup hoàn thành!")
     print("Việc cần làm:")
