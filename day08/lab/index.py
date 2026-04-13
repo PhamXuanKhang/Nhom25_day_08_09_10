@@ -493,8 +493,8 @@ if __name__ == "__main__":
 
     # Bước 4: Kiểm tra index
     # Uncomment sau khi build_index() thành công:
-    list_chunks()
-    inspect_metadata_coverage()
+    # list_chunks()
+    # inspect_metadata_coverage()
 
     print("\nSprint 1 setup hoàn thành!")
     print("Việc cần làm:")
