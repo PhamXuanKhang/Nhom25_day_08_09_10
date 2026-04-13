@@ -1,106 +1,123 @@
 # Tuning Log — RAG Pipeline (Day 08 Lab)
 
-> Template: Ghi lại mỗi thay đổi và kết quả quan sát được.
 > A/B Rule: Chỉ đổi MỘT biến mỗi lần.
 
 ---
 
-## Baseline (Sprint 2)
+## Setup & Baseline Evaluation (2026-04-13)
 
-**Ngày:** ___________  
-**Config:**
+**Mục tiêu Sprint:**
+- Build index từ 5 docs (SLA, Refund, Access Control, IT Helpdesk, HR Policy)
+- Evaluate trên 10 test questions
+- Establish baseline metrics trước optimization
+
+**Index Config:**
 ```
-retrieval_mode = "dense"
-chunk_size = _____ tokens
-overlap = _____ tokens
-top_k_search = 10
-top_k_select = 3
-use_rerank = False
-llm_model = _____
+Embedding Model: paraphrase-multilingual-MiniLM-L12-v2
+Chunk Size: 400 tokens, Overlap: 80 tokens
+Vector DB: ChromaDB (cosine similarity)
+Retrieval: Dense search, top-5
+LLM: GPT-4
 ```
-
-**Scorecard Baseline:**
-| Metric | Average Score |
-|--------|--------------|
-| Faithfulness | ? /5 |
-| Answer Relevance | ? /5 |
-| Context Recall | ? /5 |
-| Completeness | ? /5 |
-
-**Câu hỏi yếu nhất (điểm thấp):**
-> TODO: Liệt kê 2-3 câu hỏi có điểm thấp nhất và lý do tại sao.
-> Ví dụ: "q07 (Approval Matrix) - context recall = 1/5 vì dense bỏ lỡ alias."
-
-**Giả thuyết nguyên nhân (Error Tree):**
-- [ ] Indexing: Chunking cắt giữa điều khoản
-- [ ] Indexing: Metadata thiếu effective_date
-- [ ] Retrieval: Dense bỏ lỡ exact keyword / alias
-- [ ] Retrieval: Top-k quá ít → thiếu evidence
-- [ ] Generation: Prompt không đủ grounding
-- [ ] Generation: Context quá dài → lost in the middle
 
 ---
 
-## Variant 1 (Sprint 3)
+## Baseline (baseline_dense)
 
-**Ngày:** ___________  
-**Biến thay đổi:** ___________  
-**Lý do chọn biến này:**
-> TODO: Giải thích theo evidence từ baseline results.
-> Ví dụ: "Chọn hybrid vì q07 (alias query) và q09 (mã lỗi ERR-403) đều thất bại với dense.
-> Corpus có cả ngôn ngữ tự nhiên (policy) lẫn tên riêng/mã lỗi (ticket code, SLA label)."
+**Scorecard:**
+| Metric | Score |
+| Faithfulness | 4.70/5 |
+| Relevance | 4.50/5 |
+| Context Recall | 5.00/5 |
+| Completeness | 4.10/5 |
+| **Overall** | **4.58/5** |
 
-**Config thay đổi:**
-```
-retrieval_mode = "hybrid"   # hoặc biến khác
-# Các tham số còn lại giữ nguyên như baseline
-```
+**Perfect (5/5 all metrics): 6/10 questions** (q01, q02, q03, q05, q08)
 
-**Scorecard Variant 1:**
-| Metric | Baseline | Variant 1 | Delta |
-|--------|----------|-----------|-------|
-| Faithfulness | ?/5 | ?/5 | +/- |
-| Answer Relevance | ?/5 | ?/5 | +/- |
-| Context Recall | ?/5 | ?/5 | +/- |
-| Completeness | ?/5 | ?/5 | +/- |
+**Problem Questions:**
+- **q07** (Document name): Completeness 2/5 — Missing "Access Control SOP" name change
+- **q09** (Error code): Completeness 2/5 — Insufficient context (ERR-403-AUTH not in docs)
+- **q10** (VIP refund): Relevance 3/5 — No VIP-specific policies documented
 
-**Nhận xét:**
-> TODO: Variant 1 cải thiện ở câu nào? Tại sao?
-> Có câu nào kém hơn không? Tại sao?
+**Root Causes:**
+- Completeness gaps: Missing specific details & document metadata
+- Knowledge base gaps: No error codes, no VIP policies
+- Context Recall excellent (5/5) → retrieval working well
 
-**Kết luận:**
-> TODO: Variant 1 có tốt hơn baseline không?
-> Bằng chứng là gì? (điểm số, câu hỏi cụ thể)
+**Files generated:**
+- `baseline_config.json` — Config snapshot
+- `baseline_tracking.csv` — Tracking metrics
+- `scorecard_baseline.md` — Detailed analysis
 
 ---
 
-## Variant 2 (nếu có thời gian)
+## Variant Test (variant_hybrid_only)
 
-**Biến thay đổi:** ___________  
-**Config:**
-```
-# TODO
-```
+**Change:** Dense search → **Hybrid (Dense + BM25 with re-ranking)**
+**Hypothesis:** Keyword matching + semantic search might improve completeness for technical terms (P1, Level 3, ERR-403)
 
-**Scorecard Variant 2:**
-| Metric | Baseline | Variant 1 | Variant 2 | Best |
-|--------|----------|-----------|-----------|------|
-| Faithfulness | ? | ? | ? | ? |
-| Answer Relevance | ? | ? | ? | ? |
-| Context Recall | ? | ? | ? | ? |
-| Completeness | ? | ? | ? | ? |
+**Scorecard:**
+| Metric | Baseline | Variant | Delta |
+|--------|----------|---------|-------|
+| Faithfulness | 4.70 | 4.50 | -0.20 |
+| Relevance | 4.50 | 4.20 | -0.30 |
+| Context Recall | 5.00 | 5.00 | no change |
+| Completeness | 4.10 | 3.60 | -0.50 |
+| **Overall** | **4.58** | **4.33** | **-0.25** |
+
+**Perfect answers: 3/10** — Worse than baseline: 6/10
+
+**Critical Issues:**
+- **q03**: Faithfulness 2/5 (Hallucination) — Wrong section retrieved
+- **q06**: Completeness 1/5 (Critical) — Retrieved "temporary access" instead of "P1 escalation"
+- **q10**: Relevance 2/5 — Worse VIP handling
+
+**Root Cause:**
+Domain confusion from keyword matching:
+- "escalate" + "automatic" words appear in both incident & access sections
+- BM25 picked wrong section → LLM generated wrong answer
+- Re-ranking couldn't distinguish semantic contexts
+
+**Conclusion:** 
+Hybrid retrieval **made things worse**. Dense-only is better for this corpus. Simpler = more robust.
+
+**Files generated:**
+- `scorecard_variant.md` — Detailed failure analysis
+- `scorecard_comparison.md` — A/B comparison
 
 ---
 
-## Tóm tắt học được
+## Key Findings
 
-> TODO (Sprint 4): Điền sau khi hoàn thành evaluation.
+| Question | Root Cause | Fix Priority |
+|----------|-----------|--------------|
+| q07 (Doc name) | Missing metadata in chunks | P1: Add doc version info |
+| q09 (Error codes) | No error documentation | P1: Create error reference |
+| q10 (VIP policy) | Missing business rules | P1: Add VIP procedures |
+| q06 (Retrieval) | Keyword confusion | P2: Better re-ranking (can't fix with hybrid) |
 
-1. **Lỗi phổ biến nhất trong pipeline này là gì?**
-   > _____________
+---
 
-2. **Biến nào có tác động lớn nhất tới chất lượng?**
-   > _____________
+## Recommendations
 
-3. **Nếu có thêm 1 giờ, nhóm sẽ thử gì tiếp theo?**
-   > _____________
+### Priority 1 (High Impact)
+1. **Expand Knowledge Base**: Add error codes, VIP policies, document metadata
+2. **Improve Chunking**: Preserve exact document names and version changes  
+3. **Strict Prompts**: "Only use information from context"
+
+### Priority 2 (Medium Impact)
+- Try cross-encoder re-ranking instead of hybrid
+- Add few-shot examples for completeness
+- Fine-tune prompts for edge cases
+
+### Lessons Learned
+- Dense retrieval outperforms hybrid for small corpus
+- Simpler systems are more robust
+- Test before deploying — variant would break production
+- Completeness is the bottleneck, not retrieval  
+
+---
+
+**Tracking:** `results/baseline_tracking.csv`  
+**Detailed Scorecards:** `results/scorecard_baseline.md` & `results/scorecard_variant.md`  
+**Comparison:** `results/scorecard_comparison.md`
