@@ -8,7 +8,7 @@
 | Phạm Xuân Khang | Tech Lead |
 | Nguyễn Văn Thức | Retrieval Owner |
 | Phạm Thành Duy | Eval Owner |
-| Nguyễn Thị Thu Ngọc | Documentation Owner |
+| Nguyễn Thị Ngọc Thư | Documentation Owner |
 
 ---
 
