@@ -46,13 +46,13 @@ BASELINE_CONFIG = {
 }
 
 # Cấu hình variant (Sprint 3 — điều chỉnh theo lựa chọn của nhóm)
-# TODO Sprint 4: Cập nhật VARIANT_CONFIG theo variant nhóm đã implement
 VARIANT_CONFIG = {
-    "retrieval_mode": "hybrid",   # A/B: chỉ đổi retrieval mode
+    "retrieval_mode": "hybrid",
     "top_k_search": 10,
     "top_k_select": 3,
-    "use_rerank": False,
-    "label": "variant_hybrid_only",
+    "use_rerank": True,
+    "query_transform": "expansion",
+    "label": "variant_hybrid_rerank_expansion",
 }
 
 
@@ -411,6 +411,7 @@ def run_scorecard(
                 top_k_search=config.get("top_k_search", 10),
                 top_k_select=config.get("top_k_select", 3),
                 use_rerank=config.get("use_rerank", False),
+                query_transform=config.get("query_transform", None),
                 verbose=False,
             )
             answer = result["answer"]
