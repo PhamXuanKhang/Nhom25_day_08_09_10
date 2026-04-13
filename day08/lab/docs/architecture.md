@@ -147,23 +147,103 @@ Answer:
 
 ## 6. System Data Flow
 
-Indexing Pipeline:
-```
-[5 Policy Docs] → index.py → Preprocess, Chunk (24 chunks), Embed (384-dim)
-                                    ↓
-                            ChromaDB Vector Store
+### Indexing Pipeline (Detailed)
+
+```mermaid
+---
+config:
+  layout: dagre
+---
+flowchart TD
+    A[Start: python index.py] --> B[Load .env]
+    B --> C[Set config: DOCS_DIR, CHROMA_DB_DIR, CHUNK_SIZE, CHUNK_OVERLAP]
+    C --> D[List all .txt files in data/docs]
+    D --> E[Read raw text từng file]
+
+    E --> F["preprocess_document()"]
+    F --> F1["Parse metadata header<br/>Source, Department, Effective Date, Access"]
+    F1 --> F2["Remove header lines<br/>Clean text"]
+    F2 --> G["chunk_document()"]
+
+    G --> G1["Split by section heading<br/>=== ... ==="]
+    G1 --> G2["_split_by_size()"]
+    G2 --> G3[Split by paragraph]
+    G3 --> G4[Add overlap between chunks]
+    G4 --> H["Chunks with metadata<br/>source, section, department, effective_date, access"]
+
+    H --> I["get_embedding(chunk_text)"]
+    I --> J{Embedding provider?}
+    J -->|openai| J1[OpenAI text-embedding-3-small]
+    J -->|local| J2[SentenceTransformer local model]
+
+    J1 --> K[ChromaDB PersistentClient]
+    J2 --> K
+    K --> L[Get or create collection rag_lab]
+    L --> M[Upsert chunk id + embedding + document + metadata]
+    M --> N[Repeat for all chunks/files]
+    N --> O["list_chunks()"]
+    N --> P["inspect_metadata_coverage()"]
+    P --> Q[End: index built]
 ```
 
-Generation Pipeline:
-```
-User Query → Dense Search (top-5, cosine) → Build Prompt + Context
-                                    ↓
-                         GPT-4 (temp=0.7, 500 tokens)
-                                    ↓
-                          Answer + Citation + Source
+**Output:** 24 chunks indexed in ChromaDB with metadata
+
+---
+
+### Generation & Retrieval Pipeline (Detailed)
+
+```mermaid
+---
+config:
+  layout: dagre
+---
+flowchart TD
+    A["Start: rag_answer(query)"] --> B[Choose retrieval_mode]
+    B --> C{Mode?}
+
+    C -->|dense| D1["retrieve_dense()"]
+    C -->|sparse| D2["retrieve_sparse()"]
+    C -->|hybrid| D3["retrieve_hybrid()"]
+
+    D1 --> E[Candidate chunks]
+    D2 --> E
+    D3 --> E
+
+    E --> F{use_rerank?}
+    F -->|Yes| G["rerank(candidates)"]
+    F -->|No| H[Take top_k_select candidates]
+
+    G --> H
+    H --> I["build_context_block()"]
+    I --> I1["Format chunks as<br/>[1] source | section | score"]
+    I1 --> J["build_grounded_prompt()"]
+
+    J --> J1["Prompt rule:<br/>Answer only from context<br/>Say you do not know if insufficient<br/>Cite sources"]
+    J1 --> K["call_llm()"]
+    K --> L[LLM generates answer]
+
+    L --> M[Extract sources from chunks_used]
+    M --> N[Return result dict]
+    N --> N1[answer]
+    N --> N2[sources]
+    N --> N3[chunks_used]
+    N --> N4[config]
+
+    N --> O["Used by app.py / eval.py"]
+
+    subgraph Details["Retrieval Details"]
+        D1a["Dense: query embedding -> ChromaDB cosine search"]
+        D2a["Sparse: BM25 keyword search"]
+        D3a["Hybrid: Dense + Sparse -> RRF fusion"]
+    end
 ```
 
-Evaluation Pipeline:
+**Output:** Grounded answer + sources + metadata
+
+---
+
+### Evaluation Pipeline
+
 ```
 Generated Answers → eval.py → Score 4 metrics (F/R/CR/Comp)
                                     ↓
