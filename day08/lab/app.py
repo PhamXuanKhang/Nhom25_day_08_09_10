@@ -138,12 +138,50 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📊 Scorecard (từ kết quả lab)")
 
-    scores = {
-        "dense":  {"Faithfulness": 4.70, "Relevance": 4.60, "Recall": 5.00, "Completeness": 3.80},
-        "hybrid": {"Faithfulness": 4.10, "Relevance": 4.20, "Recall": 5.00, "Completeness": 3.40},
-        "sparse": {"Faithfulness": "N/A", "Relevance": "N/A", "Recall": "N/A", "Completeness": "N/A"},
-    }
-    sc = scores[retrieval_mode]
+    def _parse_scorecard_md(path: Path) -> dict:
+        """Đọc average scores từ file scorecard_*.md."""
+        result = {}
+        if not path.exists():
+            return result
+        label_map = {
+            "faithfulness": "Faithfulness",
+            "relevance": "Relevance",
+            "context recall": "Context Recall",
+            "completeness": "Completeness",
+        }
+        for line in path.read_text(encoding="utf-8").splitlines():
+            # Dòng dạng: | Faithfulness | 4.70/5 |
+            if "|" in line:
+                parts = [p.strip() for p in line.split("|") if p.strip()]
+                if len(parts) >= 2:
+                    key = parts[0].lower()
+                    val_str = parts[1]
+                    if key in label_map and "/" in val_str:
+                        try:
+                            result[label_map[key]] = float(val_str.split("/")[0])
+                        except ValueError:
+                            pass
+        return result
+
+    _lab_dir = Path(__file__).parent
+    _baseline_scores = _parse_scorecard_md(_lab_dir / "results" / "scorecard_baseline.md")
+    _variant_scores  = _parse_scorecard_md(_lab_dir / "results" / "scorecard_variant.md")
+    _na = {"Faithfulness": "N/A", "Relevance": "N/A", "Context Recall": "N/A", "Completeness": "N/A"}
+
+    # Chọn scorecard phù hợp theo retrieval mode hiện tại
+    if retrieval_mode == "dense":
+        sc = _baseline_scores if _baseline_scores else _na
+        sc_label = "baseline_dense"
+    elif retrieval_mode in ("hybrid", "sparse"):
+        sc = _variant_scores if _variant_scores else _na
+        sc_label = "variant_hybrid_rerank_expansion"
+    else:
+        sc = _na
+        sc_label = ""
+
+    if sc_label:
+        st.caption(f"Config: `{sc_label}`")
+
     cols = st.columns(2)
     for i, (metric, val) in enumerate(sc.items()):
         with cols[i % 2]:
@@ -153,7 +191,7 @@ with st.sidebar:
                     f'<div style="text-align:center; padding:8px; background:#f1f5f9; '
                     f'border:1px solid #e2e8f0; border-radius:6px; margin:4px 0;">'
                     f'<div style="font-size:11px; color:#64748b;">{metric}</div>'
-                    f'<div style="font-size:20px; font-weight:700; color:{color};">{val}</div>'
+                    f'<div style="font-size:20px; font-weight:700; color:{color};">{val:.2f}</div>'
                     f'<div style="font-size:10px; color:#94a3b8;">/5.00</div>'
                     f'</div>',
                     unsafe_allow_html=True,

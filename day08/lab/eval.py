@@ -604,7 +604,8 @@ GRADING_QUESTIONS_PATH = Path(__file__).parent / "data" / "grading_questions.jso
 def generate_grading_log(
     grading_questions_path: Path = GRADING_QUESTIONS_PATH,
     retrieval_mode: str = "hybrid",
-    use_rerank: bool = False,
+    use_rerank: bool = True,
+    query_transform: Optional[str] = "expansion",
 ) -> None:
     """
     Chạy pipeline với grading_questions.json và lưu kết quả vào logs/grading_run.json.
@@ -625,7 +626,7 @@ def generate_grading_log(
     with open(grading_questions_path, "r", encoding="utf-8") as f:
         questions = json.load(f)
 
-    print(f"Đang chạy {len(questions)} grading questions (mode={retrieval_mode}, rerank={use_rerank})...")
+    print(f"Đang chạy {len(questions)} grading questions (mode={retrieval_mode}, rerank={use_rerank}, transform={query_transform})...")
 
     log = []
     for q in questions:
@@ -637,6 +638,7 @@ def generate_grading_log(
                 question,
                 retrieval_mode=retrieval_mode,
                 use_rerank=use_rerank,
+                query_transform=query_transform,
                 verbose=False,
             )
             log.append({
@@ -646,6 +648,8 @@ def generate_grading_log(
                 "sources": result["sources"],
                 "chunks_retrieved": len(result["chunks_used"]),
                 "retrieval_mode": result["config"]["retrieval_mode"],
+                "use_rerank": result["config"]["use_rerank"],
+                "query_transform": result["config"]["query_transform"],
                 "timestamp": datetime.now().isoformat(),
             })
         except Exception as e:
@@ -741,6 +745,6 @@ if __name__ == "__main__":
             output_csv="ab_comparison.csv",
         )
 
-    # --- Grading Run (chạy sau 17:00 khi có grading_questions.json) ---
-    # Uncomment dòng dưới khi grading_questions.json đã được public:
-    # generate_grading_log(retrieval_mode="hybrid", use_rerank=False)
+    # --- Grading Run ---
+    print("\n--- Chạy Grading Questions ---")
+    generate_grading_log(retrieval_mode="hybrid", use_rerank=True, query_transform="expansion")

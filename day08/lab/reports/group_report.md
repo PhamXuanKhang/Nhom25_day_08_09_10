@@ -34,7 +34,7 @@ Chọn heading-based chunking (split theo `=== Section ===`) thay vì fixed-size
 - Tổng: 29 chunks từ 5 tài liệu
 
 ### Retrieval strategy
-Baseline dùng dense retrieval (cosine similarity). Sprint 3 thử hybrid (Dense + BM25 RRF). Kết luận: **baseline dense tốt hơn** với corpus nhỏ này — Context Recall đã đạt 5.00/5. Hybrid làm thay đổi thứ tự chunks, khiến một số câu trả lời kém chính xác hơn.
+Baseline dùng dense retrieval (cosine similarity). Sprint 3 implement variant với **hybrid (Dense + BM25 RRF) + LLM Reranker + Query Expansion**. Kết quả: variant cải thiện nhẹ Completeness (+0.10) nhưng giảm Faithfulness (−0.40) do BM25 keyword collision trên corpus nhỏ. Context Recall giữ nguyên 5.00/5. Đối với grading run, nhóm chọn dùng hybrid+rerank+expansion (config tốt nhất có sẵn) vì Completeness cao hơn và rerank+expansion giúp các câu multi-hop phức tạp.
 
 ### Grounded prompt
 Prompt áp dụng 4 nguyên tắc: evidence-only, abstain khi thiếu, citation bắt buộc, output ngắn gọn. Temperature=0 để output ổn định cho evaluation.
@@ -44,35 +44,37 @@ Prompt áp dụng 4 nguyên tắc: evidence-only, abstain khi thiếu, citation 
 ## 3. Kết quả evaluation
 
 ### Scorecard tóm tắt
-| Metric | Baseline (Dense) | Variant (Hybrid) | Delta |
-|--------|-----------------|-------------------|-------|
-| Faithfulness | 4.70/5 | 4.10/5 | -0.60 |
-| Answer Relevance | 4.60/5 | 4.20/5 | -0.40 |
+| Metric | Baseline (Dense) | Variant (Hybrid+Rerank+Expansion) | Delta |
+|--------|-----------------|-----------------------------------|-------|
+| Faithfulness | 4.70/5 | 4.30/5 | −0.40 |
+| Answer Relevance | 4.40/5 | 4.30/5 | −0.10 |
 | Context Recall | 5.00/5 | 5.00/5 | 0.00 |
-| Completeness | 3.80/5 | 3.40/5 | -0.40 |
+| Completeness | 3.70/5 | 3.80/5 | **+0.10** |
 
 ### Phân tích kết quả
-- **Điểm mạnh**: Faithfulness và Context Recall cao, pipeline không hallucinate và retrieve đúng source.
-- **Điểm yếu**: Completeness thấp nhất (3.80/5) — pipeline thường trả lời đúng nhưng thiếu chi tiết. Ví dụ q07 không nhận ra "Access Control SOP" là tên mới của "Approval Matrix".
-- **Baseline vs Variant**: Dense tốt hơn hybrid. Corpus nhỏ (29 chunks) khiến dense search đã đủ chính xác. BM25 tokenize tiếng Việt bằng whitespace split không hiệu quả.
+- **Điểm mạnh**: Context Recall 5.00/5 trên cả hai config — retrieval không bao giờ bỏ sót expected source. Faithfulness baseline cao (4.70/5) — model bám sát context, không hallucinate.
+- **Điểm yếu**: Completeness thấp nhất (3.70–3.80/5) — pipeline trả lời đúng nhưng hay thiếu chi tiết. Ví dụ q07 không nhận ra "Access Control SOP" là tên mới của "Approval Matrix" vì không có chunk nào ghi rõ tên cũ.
+- **Baseline vs Variant**: Hybrid+rerank+expansion cải thiện nhẹ Completeness (+0.10) nhờ multi-query expansion và LLM reranker chọn chunk tốt hơn. Tuy nhiên, Faithfulness giảm (−0.40) do BM25 keyword collision — q03 Level 3 approval lấy nhầm section, dẫn đến hallucination.
 
 ### Câu trả lời tốt nhất vs kém nhất
-- **Tốt nhất**: q01 (SLA P1), q02 (Hoàn tiền 7 ngày), q08 (Remote 2 ngày) — 5/5 trên mọi metric.
-- **Kém nhất**: q09 (ERR-403-AUTH) — pipeline nên abstain nhưng baseline lại suy luận từ tài liệu access control. q10 (VIP refund) — abstain đúng nhưng thiếu context phụ.
+- **Tốt nhất**: q01 (SLA P1), q02 (Hoàn tiền 7 ngày), q05 (Account lockout) — 5/5 trên mọi metric cả baseline lẫn variant.
+- **Kém nhất**: q09 (ERR-403-AUTH) — pipeline nên abstain hoàn toàn nhưng lại suy luận từ context access control liên quan. q10 (VIP refund) — abstain đúng nhưng thiếu context phụ (standard timeline). q03 variant — Faithfulness 2/5 do BM25 gây nhiễu.
 
 ---
 
 ## 4. Bài học rút ra
 
-1. **Corpus nhỏ → dense đủ tốt**: Với chỉ 29 chunks, embedding search đã cover hầu hết queries. Hybrid/rerank phát huy với corpus lớn hơn.
-2. **Abstain là khó nhất**: Dạng câu hỏi "thông tin không có trong docs" khó hơn câu hỏi thông thường. Prompt cần rõ ràng hơn về khi nào nên từ chối.
-3. **LLM-as-Judge tiết kiệm thời gian**: So với chấm thủ công 40 lần (4 metrics × 10 câu), LLM judge cho kết quả nhất quán và nhanh hơn nhiều.
-4. **A/B rule quan trọng**: Chỉ đổi retrieval_mode (dense → hybrid) giúp xác định rõ hybrid kém hơn. Nếu đổi nhiều biến cùng lúc sẽ không biết nguyên nhân.
+1. **Context Recall ≠ Answer Quality**: Dù Context Recall đạt 5.00/5 (retrieval không bao giờ bỏ sót source), Completeness vẫn chỉ 3.70–3.80/5. Retrieval đúng nguồn là điều kiện cần, không phải đủ — generation vẫn có thể bỏ sót chi tiết quan trọng trong chunk đó.
+2. **Abstain là khó nhất**: q09 (ERR-403-AUTH không có trong docs) là câu khó nhất. Pipeline retrieve đúng context liên quan (access control), nhưng generation bị "tempted" bởi partial match thay vì abstain sạch. Cần prompt rule rõ hơn: "If the specific term queried is not mentioned verbatim in any chunk, abstain."
+3. **BM25 keyword collision trong corpus nhỏ**: Thuật ngữ như "escalate", "automatic", "Level 3" xuất hiện trong cả section SLA lẫn Access Control. Trên corpus 29 chunks, BM25 khuếch đại nhiễu này thay vì giảm. Dense embedding xử lý tốt hơn vì nó hiểu ngữ nghĩa toàn câu.
+4. **LLM-as-Judge tiết kiệm thời gian nhưng cần calibration**: So với chấm thủ công 40 lần (4 metrics × 10 câu), LLM judge cho kết quả nhất quán. Tuy nhiên, judge đôi khi quá strict (q03 variant: faithfulness=2 khi câu trả lời thực ra đúng về nội dung) — cần reference answer tốt hơn để calibrate.
+5. **A/B rule quan trọng**: Chỉ thay đổi một biến (dense → hybrid+rerank+expansion) giúp xác định rõ nguyên nhân của sự khác biệt. Nếu đổi nhiều biến cùng lúc (chunking + retrieval + prompt) sẽ không thể attribute regression cho biến nào.
 
 ---
 
 ## 5. Nếu có thêm thời gian
 
-1. **Rerank bằng cross-encoder**: Top-10 dense → cross-encoder → top-3. Giữ Context Recall nhưng cải thiện chunk ordering.
-2. **Cải thiện BM25 tokenizer**: Dùng underthesea hoặc pyvi cho tiếng Việt thay vì whitespace split.
-3. **Prompt tuning cho abstain**: Thêm rule "If none of the retrieved chunks directly mention the queried term, say you don't have information about it specifically" để cải thiện q09.
+1. **Metadata chunk cho document identity**: Thêm một chunk mở đầu mỗi tài liệu ghi rõ tên hiện tại và tên cũ (ví dụ: "Tài liệu này trước đây có tên 'Approval Matrix for System Access', hiện được đổi tên thành 'Access Control SOP'"). Sẽ fix q07 và các câu hỏi về document versioning mà không cần thay đổi retrieval.
+2. **Cải thiện BM25 tokenizer**: Dùng `underthesea` hoặc `pyvi` cho word segmentation tiếng Việt thay vì whitespace split. Sẽ giảm false positive từ partial keyword match (ví dụ: "level" vs "Level 3").
+3. **Prompt tuning cho abstain**: Thêm rule "If the specific term is not found in any chunk, explicitly state that, then mention what related information IS available." Cải thiện q09 (ERR-403) và q10 (VIP refund) Completeness mà không cần re-index.
+4. **Sử dụng grading run scores để iterate**: Sau khi nhận kết quả grading, so sánh với scorecard để xác định câu nào pipeline fail — dùng làm hard negatives cho prompt tuning tiếp theo.

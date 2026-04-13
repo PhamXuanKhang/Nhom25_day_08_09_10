@@ -29,12 +29,12 @@
 ### Tài liệu được index
 | File | Department | Content | Chunks |
 |------|-----------|---------|--------|
-| `policy_refund_v4.txt` | Customer Service | Refund policies, timelines, exceptions | 5 |
-| `sla_p1_2026.txt` | IT Support | SLA targets, escalation procedures, P1 handling | 6 |
-| `access_control_sop.txt` | IT Security | Access levels, approval matrix, temporary access | 5 |
-| `it_helpdesk_faq.txt` | IT Support | Account lockout, password reset, common issues | 4 |
-| `hr_leave_policy.txt` | HR | Remote work policy, probation period, approval | 4 |
-| **Total** | - | 5 documents | **24 chunks** |
+| `policy_refund_v4.txt` | Customer Service | Refund policies, timelines, exceptions | 6 |
+| `sla_p1_2026.txt` | IT Support | SLA targets, escalation procedures, P1 handling | 5 |
+| `access_control_sop.txt` | IT Security | Access levels, approval matrix, temporary access | 7 |
+| `it_helpdesk_faq.txt` | IT Support | Account lockout, password reset, common issues | 6 |
+| `hr_leave_policy.txt` | HR | Remote work policy, probation period, approval | 5 |
+| **Total** | - | 5 documents | **29 chunks** |
 
 ### Quyết định chunking
 | Tham số | Giá trị | Lý do |
@@ -48,40 +48,36 @@
 **Implementation note:** Custom `_split_by_size()` splits by section heading ("==="), then by paragraph ("\\n\\n"), preserving natural boundaries.
 
 ### Embedding model
-- **Model**: `paraphrase-multilingual-MiniLM-L12-v2` (SentenceTransformers, 384-dim)
-  - Reason: Local execution (no API key), supports Vietnamese + English, lightweight
-  - Alternative tested: OpenAI text-embedding-3-small (more expensive, minimal gain)
+- **Model**: `text-embedding-3-small` (OpenAI, 1536-dim)
+  - Reason: High-quality multilingual embeddings, supports Vietnamese + English well
+  - Configurable via `EMBEDDING_PROVIDER` env var; fallback to `paraphrase-multilingual-MiniLM-L12-v2` (SentenceTransformers) if set to "local"
 - **Vector store**: ChromaDB PersistentClient (`chroma_db/`)
 - **Similarity metric**: Cosine distance
-- **Dimension**: 384
+- **Dimension**: 1536
 
 ---
 
 ## 3. Retrieval Pipeline (Sprint 2 + 3)
 
-### Baseline (Dense Search) — RECOMMENDED
+### Baseline (Dense Search)
 | Tham số | Giá trị | Performance |
 |---------|--------|-------------|
 | Strategy | Dense vector search (cosine similarity) | Context Recall: 5.00/5 |
-| Top-k retrieve | 5 | Evaluated on 10 test questions |
-| Rerank | None | Overall score: 4.58/5 |
-| Completeness | 4.10/5 | Perfect (5/5): 6/10 questions |
-| Configuration | See `results/baseline_config.json` | - |
+| Top-k search | 10 | Faithfulness: 4.70/5 |
+| Top-k select | 3 | Relevance: 4.40/5 |
+| Rerank | None | Completeness: 3.70/5 |
+| Query transform | None | Evaluated on 10 test questions |
 
-### Variant Tested (Hybrid Search) — NOT RECOMMENDED
+### Variant (Hybrid + LLM Rerank + Query Expansion)
 | Tham số | Giá trị | Performance | vs Baseline |
 |---------|--------|-------------|-------------|
-| Strategy | Hybrid (Dense + BM25 with RRF) | Context Recall: 5.00/5 | = |
-| Top-k search | 5 dense + 5 BM25 | Faithfulness: 4.50/5 | -0.20 |
-| Rerank | Reciprocal Rank Fusion | Overall score: 4.33/5 | **-0.25 (worse)** |
-| Query transform | None | Perfect (5/5): 3/10 questions | -3 questions |
-| Configuration | See `results/scorecard_variant.md` | - | - |
+| Strategy | Hybrid (Dense + BM25 with RRF, k=60) | Context Recall: 5.00/5 | = |
+| Top-k search | 10 (dense+sparse merged) | Faithfulness: 4.30/5 | −0.40 |
+| Top-k select | 3 (after LLM rerank) | Relevance: 4.30/5 | −0.10 |
+| Rerank | LLM-as-Reranker (gpt-4o-mini selects top-3 indices) | Completeness: 3.80/5 | +0.10 |
+| Query transform | expansion (2 alias/paraphrase variants, multi-query merge+dedup) | - | - |
 
-**Why variant performed worse:**
-- Keyword collision: "escalate" + "automatic" matched both incident & access sections
-- BM25 picked wrong section (temporary access vs P1 escalation) → q06 completeness = 1/5
-- Hallucination: q03 faithfulness dropped to 2/5 due to conflicting context
-- Conclusion: **Dense-only is better for this use case. Simpler = more robust.**
+**A/B rule applied:** Only `retrieval_mode` was changed from the baseline (dense → hybrid). Rerank and query expansion were added as the Sprint 3 variant package for comparison. Each experiment is documented in `results/ab_comparison.csv`.
 
 ---
 
@@ -105,10 +101,10 @@ Answer:
 ### LLM Configuration
 | Tham số | Giá trị | Reason |
 |---------|--------|--------|
-| Model | GPT-4 | High-quality reasoning, good Vietnamese support |
-| Temperature | 0.7 | Balanced: grounded but flexible for paraphrasing |
-| Max tokens | 500 | Sufficient for policy Q&A without token waste |
-| System prompt | Grounded @ context | Enforce faithfulness, reduce hallucination |
+| Model | gpt-4o-mini | Cost-effective, high-quality reasoning, good Vietnamese support |
+| Temperature | 0 | Deterministic output for reproducible evaluation |
+| Max tokens | 512 | Sufficient for policy Q&A without token waste |
+| System prompt | Evidence-only + abstain + citation | Enforce faithfulness, reduce hallucination |
 
 **Evaluated on:**
 - 10 test questions (2-3 per category)
@@ -119,20 +115,20 @@ Answer:
 
 ## 5. Known Issues & Failure Modes
 
-### Completeness Gaps (Action Required)
+### Completeness Gaps
 | Issue | Example | Root Cause | Fix |
 |-------|---------|-----------|-----|
-| Missing metadata | q07: "Access Control SOP" name not mentioned | Chunking doesn't preserve version changes | Add explicit "DOCUMENT META" chunk |
-| Knowledge gaps | q09: ERR-403-AUTH error not documented | No error code reference in docs | Create error code documentation |
-| Missing policies | q10: VIP refund procedures | Business rules not documented explicitly | Add VIP customer service SOP |
+| Document rename not surfaced | q07: "Access Control SOP" name not mentioned | No chunk states old→new name mapping | Add explicit "DOCUMENT META" chunk per file |
+| Error code not documented | q09: ERR-403-AUTH abstain incomplete | No error code reference in any doc | Create error code reference section in IT FAQ |
+| Missing policies | q10: VIP refund abstain incomplete | No VIP-specific policy in docs | Abstain prompt should mention standard fallback |
 
 ### Retrieval & Generation Quality
-| Metric | Score | Status | Next Step |
-|--------|-------|--------|-----------|
-| Context Recall | 5.00/5 | Excellent | Maintain |
-| Faithfulness | 4.70/5 | Good | Monitor hallucinations |
-| Relevance | 4.50/5 | Good | Expand query expansion? |
-| Completeness | 4.10/5 | **Bottleneck** | Urgent: improve knowledge base |
+| Metric | Baseline | Variant | Status | Bottleneck? |
+|--------|----------|---------|--------|-------------|
+| Context Recall | 5.00/5 | 5.00/5 | Excellent | No |
+| Faithfulness | 4.70/5 | 4.30/5 | Good | Monitor variant regression |
+| Relevance | 4.40/5 | 4.30/5 | Good | Minor gap |
+| Completeness | 3.70/5 | 3.80/5 | **Bottleneck** | Yes — knowledge base gaps |
 
 ### Debug Checklist
 | Failure Type | Diagnostic | Tool |
@@ -267,25 +263,29 @@ Generated Answers → eval.py → Score 4 metrics (F/R/CR/Comp)
 
 **Baseline Configuration:**
 ```
-Embedding: paraphrase-multilingual-MiniLM-L12-v2 (384-dim)
+Embedding: text-embedding-3-small (OpenAI, 1536-dim)
 Chunking: 400 tokens, 80 overlap, section-based
-Retrieval: Dense (5 top-k), no rerank
-Generation: GPT-4, grounded prompt
+Retrieval: Dense (top-k search=10, select=3), no rerank
+Generation: gpt-4o-mini, temperature=0, grounded prompt
 ```
 
-**Test Results (10 questions):**
+**Baseline Results (10 test questions):**
 | Metric | Score | Status |
 |--------|-------|--------|
 | Faithfulness | 4.70/5 | Strong |
-| Relevance | 4.50/5 | Good |
+| Relevance | 4.40/5 | Good |
 | Context Recall | 5.00/5 | Perfect |
-| Completeness | 4.10/ 5 | **Needs work** |
-| Overall | **4.58/5** | Production-ready |
+| Completeness | 3.70/5 | **Needs work** |
+| Overall | **4.45/5** | Good baseline |
 
-**Path to 4.75+:**
-1. Expand knowledge base (error codes, VIP policies, metadata)
-2. Improve chunking to preserve document names
-3. Enforce strict grounding in prompts
-4. Consider cross-encoder re-ranking (if time permits)
+**Variant Results (Hybrid + Rerank + Query Expansion):**
+| Metric | Score | Delta |
+|--------|-------|-------|
+| Faithfulness | 4.30/5 | −0.40 |
+| Relevance | 4.30/5 | −0.10 |
+| Context Recall | 5.00/5 | 0.00 |
+| Completeness | 3.80/5 | **+0.10** |
+
+**Key finding:** Hybrid+rerank+expansion improves Completeness (+0.10) — the pipeline retrieves more edge-case detail — but slightly hurts Faithfulness (−0.40) because conflicting context from BM25 can confuse generation on ambiguous queries (e.g., q03 Level 3 approval path).
 
 See `docs/tuning-log.md` for detailed A/B test results.
