@@ -124,6 +124,17 @@ with st.sidebar:
     top_k_select = st.slider("Top-K Select (vào prompt)", 1, 6, 3,
                               help="Số chunk thực sự đưa vào LLM prompt")
 
+    use_rerank = st.toggle("LLM Reranker", value=False,
+                           help="Dùng gpt-4o-mini để chọn lại top-K chunks relevant nhất sau khi retrieve")
+
+    query_transform = st.selectbox(
+        "Query Transformation",
+        options=["none", "expansion", "decomposition", "hyde"],
+        index=0,
+        help="expansion: sinh alias/paraphrase | decomposition: tách sub-queries | hyde: sinh hypothetical answer",
+    )
+    query_transform = None if query_transform == "none" else query_transform
+
     st.markdown("---")
     st.markdown("### 📊 Scorecard (từ kết quả lab)")
 
@@ -247,6 +258,20 @@ with chat_container:
                     f'<div style="margin:-4px 0 8px 0;">{badges}</div>',
                     unsafe_allow_html=True,
                 )
+            # Show query variants if transformation was used
+            queries_used = msg.get("queries_used", [])
+            if len(queries_used) > 1:
+                variants_html = " → ".join(
+                    f'<span style="background:#fef9c3; color:#854d0e; border:1px solid #fde047; '
+                    f'border-radius:10px; padding:1px 8px; font-size:12px;">{q}</span>'
+                    for q in queries_used
+                )
+                st.markdown(
+                    f'<div style="margin:-4px 0 6px 0; font-size:12px; color:#92400e;">'
+                    f'🔄 Query expansion: {variants_html}</div>',
+                    unsafe_allow_html=True,
+                )
+
             # Show retrieved chunks in expander
             if msg.get("chunks"):
                 with st.expander(f"🔎 {len(msg['chunks'])} chunk đã retrieve ({msg.get('mode', 'dense')})"):
@@ -320,7 +345,8 @@ if submitted and user_input and user_input.strip():
                 retrieval_mode=retrieval_mode,
                 top_k_search=top_k_search,
                 top_k_select=top_k_select,
-                use_rerank=False,
+                use_rerank=use_rerank,
+                query_transform=query_transform,
                 verbose=False,
             )
 
@@ -334,6 +360,8 @@ if submitted and user_input and user_input.strip():
                 "sources": sources,
                 "chunks": chunks,
                 "mode": retrieval_mode,
+                "queries_used": result.get("queries_used", [query]),
+                "config": result.get("config", {}),
             })
 
         except Exception as e:

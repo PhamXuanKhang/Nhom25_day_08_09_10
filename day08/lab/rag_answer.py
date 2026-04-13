@@ -236,33 +236,76 @@ def rerank(
     top_k: int = TOP_K_SELECT,
 ) -> List[Dict[str, Any]]:
     """
-    Rerank các candidate chunks bằng cross-encoder.
+    Rerank các candidate chunks bằng LLM-as-Reranker (gpt-4o-mini).
 
-    Cross-encoder: chấm lại "chunk nào thực sự trả lời câu hỏi này?"
-    MMR (Maximal Marginal Relevance): giữ relevance nhưng giảm trùng lặp
+    LLM được yêu cầu chọn top_k chunks relevant nhất với query và trả về
+    danh sách index theo thứ tự giảm dần về relevance.
 
-    Funnel logic (từ slide):
-      Search rộng (top-20) → Rerank (top-6) → Select (top-3)
-
-    TODO Sprint 3 (nếu chọn rerank):
-    Option A — Cross-encoder:
-        from sentence_transformers import CrossEncoder
-        model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-        pairs = [[query, chunk["text"]] for chunk in candidates]
-        scores = model.predict(pairs)
-        ranked = sorted(zip(candidates, scores), key=lambda x: x[1], reverse=True)
-        return [chunk for chunk, _ in ranked[:top_k]]
-
-    Option B — Rerank bằng LLM (đơn giản hơn nhưng tốn token):
-        Gửi list chunks cho LLM, yêu cầu chọn top_k relevant nhất
-
-    Khi nào dùng rerank:
-    - Dense/hybrid trả về nhiều chunk nhưng có noise
-    - Muốn chắc chắn chỉ 3-5 chunk tốt nhất vào prompt
+    Funnel logic: Search rộng (top-10) → LLM Rerank → top-3 vào prompt.
+    Ưu điểm so với cross-encoder: không cần download model, dùng luôn API key có sẵn.
     """
-    # TODO Sprint 3: Implement rerank
-    # Tạm thời trả về top_k đầu tiên (không rerank)
-    return candidates[:top_k]
+    if len(candidates) <= top_k:
+        return candidates
+
+    # Tạo danh sách chunks để LLM chấm
+    chunk_summaries = []
+    for i, chunk in enumerate(candidates):
+        source = chunk["metadata"].get("source", "?")
+        section = chunk["metadata"].get("section", "")
+        preview = chunk["text"][:300].replace("\n", " ")
+        chunk_summaries.append(f"[{i}] {source} | {section}\n{preview}")
+
+    chunks_text = "\n\n".join(chunk_summaries)
+
+    prompt = f"""You are a relevance judge. Given a user question and a list of text chunks,
+select the {top_k} most relevant chunk indices that best answer the question.
+
+Question: {query}
+
+Chunks:
+{chunks_text}
+
+Return ONLY a JSON array of {top_k} integer indices in order of relevance (most relevant first).
+Example: [2, 0, 5]
+Return ONLY the JSON array, no explanation."""
+
+    try:
+        from openai import OpenAI
+        import json as _json
+
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_tokens=64,
+        )
+        raw = response.choices[0].message.content.strip()
+        # Parse JSON array — strip markdown fences if present
+        raw = raw.strip("`").strip()
+        if raw.startswith("json"):
+            raw = raw[4:].strip()
+        indices = _json.loads(raw)
+        # Validate: keep only valid indices, deduplicate, cap at top_k
+        seen = set()
+        selected = []
+        for idx in indices:
+            if isinstance(idx, int) and 0 <= idx < len(candidates) and idx not in seen:
+                selected.append(candidates[idx])
+                seen.add(idx)
+            if len(selected) == top_k:
+                break
+        # Fill remaining slots if LLM returned fewer than top_k
+        if len(selected) < top_k:
+            for i, c in enumerate(candidates):
+                if i not in seen:
+                    selected.append(c)
+                if len(selected) == top_k:
+                    break
+        return selected
+    except Exception:
+        # Fallback: trả về top_k đầu tiên nếu LLM rerank thất bại
+        return candidates[:top_k]
 
 
 # =============================================================================
@@ -273,31 +316,77 @@ def transform_query(query: str, strategy: str = "expansion") -> List[str]:
     """
     Biến đổi query để tăng recall.
 
-    Strategies:
-      - "expansion": Thêm từ đồng nghĩa, alias, tên cũ
-      - "decomposition": Tách query phức tạp thành 2-3 sub-queries
-      - "hyde": Sinh câu trả lời giả (hypothetical document) để embed thay query
+    Strategies được implement:
+      - "expansion": LLM sinh 2 alias/paraphrase. Mỗi variant được retrieve độc lập,
+        kết quả merge + dedup trước khi rerank/select. Giải quyết alias mismatch
+        (vd: "Approval Matrix" → cũng tìm "Access Control SOP").
+      - "decomposition": LLM tách query phức tạp thành 2-3 sub-queries độc lập.
+        Phù hợp khi query hỏi nhiều thứ cùng lúc.
+      - "hyde": LLM sinh một câu trả lời giả (hypothetical answer). Embed câu trả lời
+        đó thay vì query gốc để tìm chunks có ngữ nghĩa gần với answer hơn.
 
-    TODO Sprint 3 (nếu chọn query transformation):
-    Gọi LLM với prompt phù hợp với từng strategy.
-
-    Ví dụ expansion prompt:
-        "Given the query: '{query}'
-         Generate 2-3 alternative phrasings or related terms in Vietnamese.
-         Output as JSON array of strings."
-
-    Ví dụ decomposition:
-        "Break down this complex query into 2-3 simpler sub-queries: '{query}'
-         Output as JSON array."
-
-    Khi nào dùng:
-    - Expansion: query dùng alias/tên cũ (ví dụ: "Approval Matrix" → "Access Control SOP")
-    - Decomposition: query hỏi nhiều thứ một lúc
-    - HyDE: query mơ hồ, search theo nghĩa không hiệu quả
+    Returns:
+        List[str]: Danh sách queries để retrieve (1 hoặc nhiều).
+        Caller nên retrieve từng query rồi merge + dedup kết quả.
     """
-    # TODO Sprint 3: Implement query transformation
-    # Tạm thời trả về query gốc
-    return [query]
+    try:
+        from openai import OpenAI
+        import json as _json
+
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        if strategy == "expansion":
+            prompt = f"""Given this search query about internal company policies:
+"{query}"
+
+Generate 2 alternative phrasings or related terms that could help find the same information.
+Consider: synonyms, old names vs new names, Vietnamese/English variants, abbreviations.
+
+Return ONLY a JSON array of 2 strings. Example: ["phrasings 1", "phrasing 2"]"""
+
+        elif strategy == "decomposition":
+            prompt = f"""Break down this complex query into 2-3 simpler, independent sub-queries:
+"{query}"
+
+Each sub-query should be self-contained and searchable on its own.
+Return ONLY a JSON array of strings. Example: ["sub-query 1", "sub-query 2"]"""
+
+        elif strategy == "hyde":
+            prompt = f"""Write a short, factual answer (2-3 sentences) to this question about internal company policies,
+as if you were an expert who has read the relevant documents:
+"{query}"
+
+Write the hypothetical answer directly, no preamble."""
+            response = client.chat.completions.create(
+                model=LLM_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                max_tokens=150,
+            )
+            hypothetical_answer = response.choices[0].message.content.strip()
+            return [hypothetical_answer]  # Embed này thay cho query gốc
+
+        else:
+            return [query]
+
+        response = client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_tokens=150,
+        )
+        raw = response.choices[0].message.content.strip().strip("`").strip()
+        if raw.startswith("json"):
+            raw = raw[4:].strip()
+        variants = _json.loads(raw)
+        if isinstance(variants, list) and variants:
+            # Luôn đặt query gốc đầu tiên để đảm bảo không mất recall
+            all_queries = [query] + [v for v in variants if isinstance(v, str) and v != query]
+            return all_queries[:3]  # Tối đa 3 queries để tránh quá nhiều API calls
+        return [query]
+
+    except Exception:
+        return [query]
 
 
 # =============================================================================
@@ -404,17 +493,21 @@ def rag_answer(
     top_k_search: int = TOP_K_SEARCH,
     top_k_select: int = TOP_K_SELECT,
     use_rerank: bool = False,
+    query_transform: Optional[str] = None,
     verbose: bool = False,
 ) -> Dict[str, Any]:
     """
-    Pipeline RAG hoàn chỉnh: query → retrieve → (rerank) → generate.
+    Pipeline RAG hoàn chỉnh: query → (transform) → retrieve → (rerank) → generate.
 
     Args:
         query: Câu hỏi
         retrieval_mode: "dense" | "sparse" | "hybrid"
         top_k_search: Số chunk lấy từ vector store (search rộng)
         top_k_select: Số chunk đưa vào prompt (sau rerank/select)
-        use_rerank: Có dùng cross-encoder rerank không
+        use_rerank: Dùng LLM reranker để chọn top_k_select chunks tốt nhất
+        query_transform: None | "expansion" | "decomposition" | "hyde"
+                         Nếu không None, query được biến đổi trước khi retrieve.
+                         Kết quả từ mọi variant được merge + dedup theo text.
         verbose: In thêm thông tin debug
 
     Returns:
@@ -423,45 +516,66 @@ def rag_answer(
           - "sources": list source names trích dẫn
           - "chunks_used": list chunks đã dùng
           - "query": query gốc
+          - "queries_used": list queries thực sự dùng để retrieve
           - "config": cấu hình pipeline đã dùng
-
-    TODO Sprint 2 — Implement pipeline cơ bản:
-    1. Chọn retrieval function dựa theo retrieval_mode
-    2. Gọi rerank() nếu use_rerank=True
-    3. Truncate về top_k_select chunks
-    4. Build context block và grounded prompt
-    5. Gọi call_llm() để sinh câu trả lời
-    6. Trả về kết quả kèm metadata
-
-    TODO Sprint 3 — Thử các variant:
-    - Variant A: đổi retrieval_mode="hybrid"
-    - Variant B: bật use_rerank=True
-    - Variant C: thêm query transformation trước khi retrieve
     """
     config = {
         "retrieval_mode": retrieval_mode,
         "top_k_search": top_k_search,
         "top_k_select": top_k_select,
         "use_rerank": use_rerank,
+        "query_transform": query_transform,
     }
 
-    # --- Bước 1: Retrieve ---
-    if retrieval_mode == "dense":
-        candidates = retrieve_dense(query, top_k=top_k_search)
-    elif retrieval_mode == "sparse":
-        candidates = retrieve_sparse(query, top_k=top_k_search)
-    elif retrieval_mode == "hybrid":
-        candidates = retrieve_hybrid(query, top_k=top_k_search)
+    # --- Bước 1: Query Transformation (optional) ---
+    if query_transform:
+        queries = transform_query(query, strategy=query_transform)
     else:
-        raise ValueError(f"retrieval_mode không hợp lệ: {retrieval_mode}")
+        queries = [query]
 
     if verbose:
-        print(f"\n[RAG] Query: {query}")
+        print(f"\n[RAG] Original query: {query}")
+        if len(queries) > 1:
+            print(f"[RAG] Transformed queries ({query_transform}): {queries}")
+
+    # --- Bước 2: Retrieve (cho mỗi query variant, rồi merge + dedup) ---
+    def _retrieve(q: str) -> List[Dict[str, Any]]:
+        if retrieval_mode == "dense":
+            return retrieve_dense(q, top_k=top_k_search)
+        elif retrieval_mode == "sparse":
+            return retrieve_sparse(q, top_k=top_k_search)
+        elif retrieval_mode == "hybrid":
+            return retrieve_hybrid(q, top_k=top_k_search)
+        else:
+            raise ValueError(f"retrieval_mode không hợp lệ: {retrieval_mode}")
+
+    if len(queries) == 1:
+        candidates = _retrieve(queries[0])
+    else:
+        # Multi-query: merge kết quả, dedup theo text, giữ score cao nhất
+        seen_texts: Dict[str, int] = {}  # text[:100] → index in candidates
+        candidates = []
+        for q in queries:
+            for chunk in _retrieve(q):
+                key = chunk["text"][:100]
+                if key not in seen_texts:
+                    seen_texts[key] = len(candidates)
+                    candidates.append(chunk)
+                else:
+                    # Giữ score cao nhất nếu chunk đã tồn tại
+                    existing_idx = seen_texts[key]
+                    if chunk.get("score", 0) > candidates[existing_idx].get("score", 0):
+                        candidates[existing_idx]["score"] = chunk["score"]
+        # Sort lại theo score sau merge
+        candidates.sort(key=lambda c: c.get("score", 0), reverse=True)
+        candidates = candidates[:top_k_search]
+
+    if verbose:
         print(f"[RAG] Retrieved {len(candidates)} candidates (mode={retrieval_mode})")
         for i, c in enumerate(candidates[:3]):
             print(f"  [{i+1}] score={c.get('score', 0):.3f} | {c['metadata'].get('source', '?')}")
 
-    # --- Bước 2: Rerank (optional) ---
+    # --- Bước 3: Rerank (optional) ---
     if use_rerank:
         candidates = rerank(query, candidates, top_k=top_k_select)
     else:
@@ -488,6 +602,7 @@ def rag_answer(
 
     return {
         "query": query,
+        "queries_used": queries,
         "answer": answer,
         "sources": sources,
         "chunks_used": candidates,
