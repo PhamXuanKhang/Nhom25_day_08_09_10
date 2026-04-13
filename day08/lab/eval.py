@@ -56,6 +56,23 @@ VARIANT_CONFIG = {
 }
 
 
+def _rag_collection_exists(db_dir: Path = Path(__file__).parent / "chroma_db") -> bool:
+    """Kiểm tra xem collection rag_lab đã được build chưa."""
+    try:
+        import chromadb
+
+        client = chromadb.PersistentClient(path=str(db_dir))
+        client.get_collection("rag_lab")
+        return True
+    except Exception:
+        return False
+
+
+def _print_missing_index_help() -> None:
+    print("\nChưa tìm thấy collection [rag_lab] trong chroma_db.")
+    print("Hãy chạy `python index.py` trước để build index, rồi chạy lại `python eval.py`.")
+
+
 def _parse_judge_json(raw_text: str) -> Dict[str, Any]:
     """Parse JSON từ LLM judge, kể cả khi bị bọc bởi code fence."""
     text = (raw_text or "").strip()
@@ -364,6 +381,10 @@ def run_scorecard(
         with open(TEST_QUESTIONS_PATH, "r", encoding="utf-8") as f:
             test_questions = json.load(f)
 
+    if not _rag_collection_exists():
+        _print_missing_index_help()
+        return []
+
     results = []
     label = config.get("label", "unnamed")
 
@@ -654,6 +675,10 @@ if __name__ == "__main__":
     print("=" * 60)
     print("Sprint 4: Evaluation & Scorecard")
     print("=" * 60)
+
+    if not _rag_collection_exists():
+        _print_missing_index_help()
+        raise SystemExit(1)
 
     # Kiểm tra test questions
     print(f"\nLoading test questions từ: {TEST_QUESTIONS_PATH}")
