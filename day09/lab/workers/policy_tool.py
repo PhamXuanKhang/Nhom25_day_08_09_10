@@ -123,7 +123,7 @@ def analyze_policy(task: str, chunks: list) -> dict:
         })
 
     # Exception 2: Digital product
-    if any(kw in task_lower for kw in ["license key", "license", "subscription", "kỹ thuật số", "digital"]):
+    if any(kw in task_lower or kw in context_text for kw in ["license key", "license", "subscription", "kỹ thuật số", "digital"]):
         exceptions_found.append({
             "type": "digital_product_exception",
             "rule": "Sản phẩm kỹ thuật số (license key, subscription) không được hoàn tiền (Điều 3).",
@@ -131,7 +131,7 @@ def analyze_policy(task: str, chunks: list) -> dict:
         })
 
     # Exception 3: Activated product
-    if any(kw in task_lower for kw in ["đã kích hoạt", "đã đăng ký", "đã sử dụng"]):
+    if any(kw in task_lower or kw in context_text for kw in ["đã kích hoạt", "đã đăng ký", "đã sử dụng", "activated"]):
         exceptions_found.append({
             "type": "activated_exception",
             "rule": "Sản phẩm đã kích hoạt hoặc đăng ký tài khoản không được hoàn tiền (Điều 3).",
