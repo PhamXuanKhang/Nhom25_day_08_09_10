@@ -1,0 +1,482 @@
+{
+  "generated_at": "2026-04-14T16:53:06.577057",
+  "total": 15,
+  "succeeded": 15,
+  "route_accuracy": 0.9333333333333333,
+  "source_hit_rate": 1.0,
+  "results": [
+    {
+      "id": "q01",
+      "question": "SLA xử lý ticket P1 là bao lâu?",
+      "expected_answer": "Ticket P1 có SLA phản hồi ban đầu 15 phút và thời gian xử lý (resolution) là 4 giờ.",
+      "expected_sources": [
+        "sla_p1_2026.txt"
+      ],
+      "expected_route": "retrieval_worker",
+      "difficulty": "easy",
+      "category": "SLA",
+      "test_type": "single_worker",
+      "actual_route": "retrieval_worker",
+      "actual_sources": [
+        "sla_p1_2026.txt"
+      ],
+      "actual_answer": "- Phản hồi ban đầu (first response): 15 phút kể từ khi ticket được tạo.\n- Xử lý và khắc phục (resolution): 4 giờ.\n- Escalation: Tự động escalate lên Senior Engineer nếu không có phản hồi trong 10 phút.\n- Thông báo stakeholder: Ngay khi nhận ticket, update mỗi 30 phút cho đến khi resolve. [1]",
+      "confidence": 0.8,
+      "latency_ms": 6248,
+      "workers_called": [
+        "retrieval_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [],
+      "hitl_triggered": false,
+      "abstain": false,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165219_926338.json"
+    },
+    {
+      "id": "q02",
+      "question": "Khách hàng có thể yêu cầu hoàn tiền trong bao nhiêu ngày?",
+      "expected_answer": "Khách hàng có thể yêu cầu hoàn tiền trong vòng 7 ngày làm việc kể từ thời điểm xác nhận đơn hàng.",
+      "expected_sources": [
+        "policy_refund_v4.txt"
+      ],
+      "expected_route": "retrieval_worker",
+      "difficulty": "easy",
+      "category": "Refund",
+      "test_type": "single_worker",
+      "actual_route": "policy_tool_worker",
+      "actual_sources": [
+        "policy_refund_v4.txt"
+      ],
+      "actual_answer": "Khách hàng có thể yêu cầu hoàn tiền trong vòng 7 ngày làm việc kể từ thời điểm xác nhận đơn hàng, với điều kiện sản phẩm bị lỗi do nhà sản xuất và đơn hàng chưa được sử dụng hoặc chưa bị mở seal [1].",
+      "confidence": 0.77,
+      "latency_ms": 2386,
+      "workers_called": [
+        "retrieval_worker",
+        "policy_tool_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [],
+      "hitl_triggered": false,
+      "abstain": false,
+      "route_ok": false,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165226_175461.json"
+    },
+    {
+      "id": "q03",
+      "question": "Ai phải phê duyệt để cấp quyền Level 3?",
+      "expected_answer": "Level 3 (Elevated Access) cần phê duyệt từ Line Manager, IT Admin, và IT Security — ba người phê duyệt.",
+      "expected_sources": [
+        "access_control_sop.txt"
+      ],
+      "expected_route": "policy_tool_worker",
+      "difficulty": "easy",
+      "category": "Access Control",
+      "test_type": "single_worker",
+      "actual_route": "policy_tool_worker",
+      "actual_sources": [
+        "hr_leave_policy.txt",
+        "access_control_sop.txt"
+      ],
+      "actual_answer": "Để cấp quyền Level 3, cần có sự phê duyệt của các bên sau:\n\n- Line Manager\n- IT Admin\n- IT Security\n\nQuy trình này không có ngoại lệ khẩn cấp, nghĩa là phải tuân thủ đủ 3 phê duyệt [1], [2], [3].",
+      "confidence": 0.77,
+      "latency_ms": 2996,
+      "workers_called": [
+        "retrieval_worker",
+        "policy_tool_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [
+        "check_access_permission"
+      ],
+      "hitl_triggered": false,
+      "abstain": false,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165228_564346.json"
+    },
+    {
+      "id": "q04",
+      "question": "Tài khoản bị khóa sau bao nhiêu lần đăng nhập sai?",
+      "expected_answer": "Tài khoản bị khóa sau 5 lần đăng nhập sai liên tiếp.",
+      "expected_sources": [
+        "it_helpdesk_faq.txt"
+      ],
+      "expected_route": "retrieval_worker",
+      "difficulty": "easy",
+      "category": "IT Helpdesk",
+      "test_type": "single_worker",
+      "actual_route": "retrieval_worker",
+      "actual_sources": [
+        "it_helpdesk_faq.txt",
+        "access_control_sop.txt"
+      ],
+      "actual_answer": "Tài khoản bị khóa sau 5 lần đăng nhập sai liên tiếp. Để mở khóa, người dùng có thể liên hệ IT Helpdesk hoặc tự reset qua portal SSO [1].",
+      "confidence": 0.73,
+      "latency_ms": 3216,
+      "workers_called": [
+        "retrieval_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [],
+      "hitl_triggered": false,
+      "abstain": false,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165231_567381.json"
+    },
+    {
+      "id": "q05",
+      "question": "Nhân viên được làm remote tối đa mấy ngày mỗi tuần?",
+      "expected_answer": "Nhân viên sau probation period có thể làm remote tối đa 2 ngày/tuần với điều kiện được Team Lead phê duyệt.",
+      "expected_sources": [
+        "hr_leave_policy.txt"
+      ],
+      "expected_route": "retrieval_worker",
+      "difficulty": "easy",
+      "category": "HR Policy",
+      "test_type": "single_worker",
+      "actual_route": "retrieval_worker",
+      "actual_sources": [
+        "access_control_sop.txt",
+        "hr_leave_policy.txt"
+      ],
+      "actual_answer": "Nhân viên được làm remote tối đa 2 ngày mỗi tuần sau khi đã qua probation period. Lịch remote phải được phê duyệt bởi Team Lead qua HR Portal. Ngày onsite bắt buộc là Thứ 3 và Thứ 5 theo lịch team [1].",
+      "confidence": 0.79,
+      "latency_ms": 2801,
+      "workers_called": [
+        "retrieval_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [],
+      "hitl_triggered": false,
+      "abstain": false,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165234_789684.json"
+    },
+    {
+      "id": "q06",
+      "question": "Ticket P1 không được phản hồi sau 10 phút. Hệ thống tự động làm gì?",
+      "expected_answer": "Ticket P1 tự động escalate lên Senior Engineer nếu không có phản hồi trong 10 phút. Đồng thời gửi thông báo tới Slack #incident-p1 và PagerDuty.",
+      "expected_sources": [
+        "sla_p1_2026.txt"
+      ],
+      "expected_route": "retrieval_worker",
+      "difficulty": "medium",
+      "category": "SLA",
+      "test_type": "single_worker",
+      "actual_route": "retrieval_worker",
+      "actual_sources": [
+        "sla_p1_2026.txt"
+      ],
+      "actual_answer": "Khi ticket P1 không được phản hồi sau 10 phút, hệ thống sẽ tự động escalate lên Senior Engineer. Điều này được quy định trong quy trình xử lý sự cố P1. \n\n- Thời gian phản hồi ban đầu là 15 phút kể từ khi ticket được tạo [2].\n- Nếu không có phản hồi trong 10 phút, sẽ tự động escalate [2]. \n\nThông tin này được nêu rõ trong tài liệu nội bộ.",
+      "confidence": 0.75,
+      "latency_ms": 3714,
+      "workers_called": [
+        "retrieval_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [],
+      "hitl_triggered": false,
+      "abstain": false,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165237_594527.json"
+    },
+    {
+      "id": "q07",
+      "question": "Sản phẩm kỹ thuật số (license key) có được hoàn tiền không?",
+      "expected_answer": "Không. Theo chính sách hoàn tiền v4 (Điều 3), sản phẩm kỹ thuật số (license key, subscription) thuộc danh mục ngoại lệ không được hoàn tiền.",
+      "expected_sources": [
+        "policy_refund_v4.txt"
+      ],
+      "expected_route": "policy_tool_worker",
+      "difficulty": "medium",
+      "category": "Refund",
+      "test_type": "single_worker",
+      "actual_route": "policy_tool_worker",
+      "actual_sources": [
+        "policy_refund_v4.txt",
+        "it_helpdesk_faq.txt"
+      ],
+      "actual_answer": "Sản phẩm kỹ thuật số (license key) không được hoàn tiền. Điều này được quy định trong chính sách hoàn tiền, cụ thể là:\n\n- Sản phẩm thuộc danh mục hàng kỹ thuật số (license key, subscription) không đủ điều kiện hoàn tiền [1].\n- Ngoại lệ không được hoàn tiền cũng xác nhận điều này [1].\n\nKết luận: Không có khả năng hoàn tiền cho sản phẩm kỹ thuật số.",
+      "confidence": 0.64,
+      "latency_ms": 3079,
+      "workers_called": [
+        "retrieval_worker",
+        "policy_tool_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [],
+      "hitl_triggered": false,
+      "abstain": false,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165241_316017.json"
+    },
+    {
+      "id": "q08",
+      "question": "Quy trình xử lý sự cố P1 gồm mấy bước và bước đầu tiên là gì?",
+      "expected_answer": "Quy trình P1 gồm 5 bước: (1) Tiếp nhận — on-call engineer xác nhận severity trong 5 phút, (2) Thông báo tới Slack và email, (3) Triage và phân công trong 10 phút, (4) Xử lý với update mỗi 30 phút, (5) Resolution và incident report trong 24 giờ.",
+      "expected_sources": [
+        "sla_p1_2026.txt"
+      ],
+      "expected_route": "retrieval_worker",
+      "difficulty": "medium",
+      "category": "SLA",
+      "test_type": "single_worker",
+      "actual_route": "retrieval_worker",
+      "actual_sources": [
+        "sla_p1_2026.txt"
+      ],
+      "actual_answer": "Quy trình xử lý sự cố P1 gồm 5 bước. Bước đầu tiên là \"Tiếp nhận\", trong đó on-call engineer nhận alert hoặc ticket và xác nhận severity trong 5 phút [1].",
+      "confidence": 0.76,
+      "latency_ms": 3556,
+      "workers_called": [
+        "retrieval_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [],
+      "hitl_triggered": false,
+      "abstain": false,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165244_401505.json"
+    },
+    {
+      "id": "q09",
+      "question": "ERR-403-AUTH là lỗi gì và cách xử lý?",
+      "expected_answer": "Không tìm thấy thông tin về mã lỗi ERR-403-AUTH trong tài liệu nội bộ hiện có. Hãy liên hệ IT Helpdesk để được hỗ trợ trực tiếp.",
+      "expected_sources": [],
+      "expected_route": "retrieval_worker",
+      "difficulty": "hard",
+      "category": "Insufficient Context",
+      "test_type": "abstain",
+      "actual_route": "retrieval_worker",
+      "actual_sources": [
+        "sla_p1_2026.txt",
+        "access_control_sop.txt"
+      ],
+      "actual_answer": "Không đủ thông tin trong tài liệu nội bộ.",
+      "confidence": 0.44,
+      "latency_ms": 1584,
+      "workers_called": [
+        "human_review",
+        "retrieval_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [],
+      "hitl_triggered": true,
+      "abstain": true,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165247_961959.json"
+    },
+    {
+      "id": "q10",
+      "question": "Store credit khi hoàn tiền có giá trị bao nhiêu so với tiền gốc?",
+      "expected_answer": "Khách hàng có thể chọn nhận store credit thay thế với giá trị 110% so với số tiền hoàn (tức là thêm 10% so với hoàn tiền gốc).",
+      "expected_sources": [
+        "policy_refund_v4.txt"
+      ],
+      "expected_route": "policy_tool_worker",
+      "difficulty": "medium",
+      "category": "Refund",
+      "test_type": "single_worker",
+      "actual_route": "policy_tool_worker",
+      "actual_sources": [
+        "policy_refund_v4.txt"
+      ],
+      "actual_answer": "Store credit khi hoàn tiền có giá trị 110% so với số tiền gốc. Khách hàng có thể chọn nhận store credit thay thế trong trường hợp đủ điều kiện hoàn tiền [1].",
+      "confidence": 0.72,
+      "latency_ms": 2313,
+      "workers_called": [
+        "retrieval_worker",
+        "policy_tool_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [],
+      "hitl_triggered": false,
+      "abstain": false,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165249_550824.json"
+    },
+    {
+      "id": "q11",
+      "question": "Ticket P1 được tạo lúc 22:47. Ai sẽ nhận thông báo đầu tiên và qua kênh nào? Escalation xảy ra lúc mấy giờ?",
+      "expected_answer": "Ngay khi P1 ticket được tạo: (1) Thông báo gửi tới Slack #incident-p1 và email incident@company.internal, (2) PagerDuty tự động nhắn on-call engineer. Nếu không có phản hồi trong 10 phút (tức 22:57), ticket tự động escalate lên Senior Engineer.",
+      "expected_sources": [
+        "sla_p1_2026.txt"
+      ],
+      "expected_route": "retrieval_worker",
+      "difficulty": "medium",
+      "category": "SLA",
+      "test_type": "multi_detail",
+      "actual_route": "retrieval_worker",
+      "actual_sources": [
+        "sla_p1_2026.txt"
+      ],
+      "actual_answer": "- Người nhận thông báo đầu tiên là on-call engineer qua kênh Slack #incident-p1 và email incident@company.internal ngay lập tức sau khi ticket được tạo [1].\n- Escalation sẽ xảy ra tự động lên Senior Engineer nếu không có phản hồi trong 10 phút, tức là vào lúc 22:57 [3].",
+      "confidence": 0.79,
+      "latency_ms": 2534,
+      "workers_called": [
+        "retrieval_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [],
+      "hitl_triggered": false,
+      "abstain": false,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165251_869116.json"
+    },
+    {
+      "id": "q12",
+      "question": "Khách hàng đặt đơn ngày 31/01/2026 và yêu cầu hoàn tiền ngày 07/02/2026. Sản phẩm lỗi nhà sản xuất, chưa kích hoạt, không phải Flash Sale. Được hoàn tiền không?",
+      "expected_answer": "Đây là trường hợp phức tạp về temporal scoping: Đơn đặt ngày 31/01/2026 (trước ngày 01/02/2026) nên áp dụng chính sách hoàn tiền phiên bản 3, không phải v4. Tài liệu hiện tại chỉ có chính sách v4. Cần xác nhận với CS Team về nội dung chính sách v3.",
+      "expected_sources": [
+        "policy_refund_v4.txt"
+      ],
+      "expected_route": "policy_tool_worker",
+      "difficulty": "hard",
+      "category": "Refund",
+      "test_type": "temporal_scoping",
+      "actual_route": "policy_tool_worker",
+      "actual_sources": [
+        "policy_refund_v4.txt"
+      ],
+      "actual_answer": "Không đủ thông tin trong tài liệu nội bộ. Chính sách hoàn tiền áp dụng cho đơn hàng đặt trước ngày 01/02/2026 sẽ theo phiên bản 3, nhưng nội dung của chính sách này không có trong tài liệu tham khảo. Cần xác nhận với CS Team để biết rõ điều kiện hoàn tiền theo chính sách v3.",
+      "confidence": 0.33,
+      "latency_ms": 2740,
+      "workers_called": [
+        "retrieval_worker",
+        "policy_tool_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [],
+      "hitl_triggered": false,
+      "abstain": true,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165254_406283.json"
+    },
+    {
+      "id": "q13",
+      "question": "Contractor cần Admin Access (Level 3) để khắc phục sự cố P1 đang active. Quy trình cấp quyền tạm thời như thế nào?",
+      "expected_answer": "Level 3 (Admin Access) KHÔNG có emergency bypass theo SOP. Dù đang có P1, vẫn phải có approval từ đủ 3 bên: Line Manager, IT Admin, và IT Security. Không thể cấp tạm thời.",
+      "expected_sources": [
+        "access_control_sop.txt",
+        "sla_p1_2026.txt"
+      ],
+      "expected_route": "policy_tool_worker",
+      "difficulty": "hard",
+      "category": "Access Control",
+      "test_type": "multi_worker",
+      "actual_route": "policy_tool_worker",
+      "actual_sources": [
+        "access_control_sop.txt"
+      ],
+      "actual_answer": "Quy trình cấp quyền tạm thời cho Contractor cần Admin Access (Level 3) trong trường hợp khẩn cấp như sau:\n\n- **Phê duyệt**: Cần có sự phê duyệt bằng lời từ Tech Lead.\n- **Cấp quyền**: On-call IT Admin có thể cấp quyền tạm thời tối đa 24 giờ.\n- **Yêu cầu sau 24 giờ**: Phải có ticket chính thức hoặc quyền sẽ bị thu hồi tự động.\n- **Ghi log**: Mọi quyền tạm thời phải được ghi log vào hệ thống Security Audit.\n\nLưu ý rằng Level 3 không có emergency bypass, do đó cần phải tuân thủ quy trình chuẩn với đủ 3 phê duyệt: Line Manager, IT Admin và IT Security, ngay cả khi đang có sự cố P1 [2], [3], [1].",
+      "confidence": 0.81,
+      "latency_ms": 3579,
+      "workers_called": [
+        "retrieval_worker",
+        "policy_tool_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [
+        "check_access_permission",
+        "get_ticket_info"
+      ],
+      "hitl_triggered": false,
+      "abstain": false,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165257_147827.json"
+    },
+    {
+      "id": "q14",
+      "question": "Nhân viên vừa vào thử việc (trong probation period) muốn làm remote vì lý do cá nhân. Điều kiện là gì?",
+      "expected_answer": "Nhân viên trong probation period KHÔNG được phép làm remote. Chỉ nhân viên đã qua probation period mới được phép làm remote tối đa 2 ngày/tuần với điều kiện được Team Lead phê duyệt.",
+      "expected_sources": [
+        "hr_leave_policy.txt"
+      ],
+      "expected_route": "retrieval_worker",
+      "difficulty": "medium",
+      "category": "HR Policy",
+      "test_type": "single_worker",
+      "actual_route": "retrieval_worker",
+      "actual_sources": [
+        "access_control_sop.txt",
+        "hr_leave_policy.txt"
+      ],
+      "actual_answer": "Không đủ thông tin trong tài liệu nội bộ. Tài liệu chỉ đề cập đến điều kiện làm remote cho nhân viên sau probation period, không có thông tin về nhân viên trong probation period. [1]",
+      "confidence": 0.54,
+      "latency_ms": 1896,
+      "workers_called": [
+        "retrieval_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [],
+      "hitl_triggered": false,
+      "abstain": true,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165300_729647.json"
+    },
+    {
+      "id": "q15",
+      "question": "Ticket P1 lúc 2am. Cần cấp Level 2 access tạm thời cho contractor để thực hiện emergency fix. Đồng thời cần notify stakeholders theo SLA. Nêu đủ cả hai quy trình.",
+      "expected_answer": "Hai quy trình song song: (1) SLA P1 notifications: Ngay lập tức gửi Slack #incident-p1, email incident@company.internal, PagerDuty on-call. Escalate lên Senior Engineer nếu không phản hồi trong 10 phút. (2) Level 2 access emergency: Level 2 CÓ emergency bypass — có thể cấp với approval đồng thời của Line Manager và IT Admin on-call. Không cần IT Security cho Level 2 emergency.",
+      "expected_sources": [
+        "sla_p1_2026.txt",
+        "access_control_sop.txt"
+      ],
+      "expected_route": "policy_tool_worker",
+      "difficulty": "hard",
+      "category": "Multi-hop",
+      "test_type": "multi_worker_multi_doc",
+      "actual_route": "policy_tool_worker",
+      "actual_sources": [
+        "sla_p1_2026.txt",
+        "access_control_sop.txt"
+      ],
+      "actual_answer": "- **Cấp Level 2 access tạm thời cho contractor**:\n  - On-call IT Admin có thể cấp quyền tạm thời (max 24 giờ) sau khi được Tech Lead phê duyệt bằng lời. [3]\n  - Mọi quyền tạm thời phải được ghi log vào hệ thống Security Audit. [3]\n\n- **Notify stakeholders theo SLA**:\n  - Gửi thông báo tới Slack #incident-p1 và email incident@company.internal ngay lập tức khi nhận ticket. [2]\n  - Cập nhật tiến độ lên ticket mỗi 30 phút cho đến khi resolve. [1]\n\n- **Thông tin ticket**:\n  - ticket_id: IT-9847\n  - assignee: nguyen.van.a@company.internal\n  - status: in_progress [TICKET INFO]",
+      "confidence": 0.82,
+      "latency_ms": 3944,
+      "workers_called": [
+        "retrieval_worker",
+        "policy_tool_worker",
+        "synthesis_worker"
+      ],
+      "mcp_tools_used": [
+        "check_access_permission",
+        "get_ticket_info"
+      ],
+      "hitl_triggered": false,
+      "abstain": false,
+      "route_ok": true,
+      "sources_ok": true,
+      "abstain_ok": true,
+      "trace_file": "D:\\0. AI20K\\Nhom25_day_08_09_10\\day09\\lab\\artifacts\\traces\\run_20260414_165302_628279.json"
+    }
+  ]
+}
