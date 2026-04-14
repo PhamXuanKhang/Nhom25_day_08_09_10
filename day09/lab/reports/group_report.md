@@ -7,7 +7,7 @@
 | Phạm Xuân Khang | Supervisor Owner | khang.px@vinuni.edu.vn |
 | Phạm Thành Duy | Worker Owner | duy.pt@vinuni.edu.vn |
 | Văn Thức | MCP Owner | thuc.v@vinuni.edu.vn |
-| Nguyễn Thị Thu | Trace & Docs Owner | thu.nt@vinuni.edu.vn |
+| Nguyễn Thị Ngọc Thư | Trace & Docs Owner | thu.nt@vinuni.edu.vn |
 
 **Ngày nộp:** 2026-04-14  
 **Repo:** https://github.com/PhamXuanKhang/Nhom25_day_08_09_10  
