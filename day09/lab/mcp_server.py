@@ -28,7 +28,7 @@ Chạy thử:
     python mcp_server.py
 """
 
-from _future_ import annotations
+from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta
@@ -362,7 +362,7 @@ def dispatch_tool(tool_name: str, tool_input: dict) -> dict:
 # CLI smoke test
 # ─────────────────────────────────────────────
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     print("=" * 60)
     print("MCP Server — Tool Discovery & Smoke Test")
     print("=" * 60)
