@@ -10,6 +10,11 @@ day10/lab/data/grading_questions.json
 day08/lab/chroma_db/
 day08/lab/__pycache__/
 
+day09/lab/chroma_db/
+day09/lab/__pycache__/
+day09/lab/workers/__pycache__/
+
+day09/lab/note.md
 .env
 .vscode/mcp.json
 day09/lab/__pycache__/

@@ -7,15 +7,17 @@ python-dotenv>=1.0.0
 # ─── Vector Store ───────────────────────
 chromadb>=0.4.22
 
-# ─── Embeddings ─────────────────────────
-# Option A: Sentence Transformers (offline, không cần API key)
-sentence-transformers>=2.6.0
-
-# ─── LLM ────────────────────────────────
-# Option A: OpenAI
+# ─── LLM + Embeddings (OpenAI) ──────────
+# Dùng cho cả embedding (text-embedding-3-small) và synthesis (gpt-4o-mini).
+# OPENAI_API_KEY bắt buộc trong .env để index và chạy pipeline.
 openai>=1.12.0
 
-# Option B: Google Gemini
+# ─── Embeddings — offline fallback (optional) ───
+# Không bắt buộc; bỏ comment nếu muốn chạy hoàn toàn offline (không cần API key).
+# sentence-transformers>=2.6.0
+
+# ─── LLM (Google Gemini, optional fallback) ──
+# Bỏ comment nếu muốn dùng Gemini làm LLM thay thế khi OpenAI không khả dụng.
 # google-generativeai>=0.5.0
 
 # ─── Orchestration ──────────────────────
@@ -27,12 +29,12 @@ openai>=1.12.0
 # ─── Data ───────────────────────────────
 pyyaml>=6.0.1
 
-# ─── MCP (optional — Sprint 3 Bonus) ───
-# Uncomment nếu muốn implement real MCP server:
-# mcp>=1.0.0
-# httpx>=0.27.0
-# fastapi>=0.110.0
-# uvicorn>=0.27.0
+# ─── MCP HTTP Server (Sprint 3 Bonus +2) ───
+# Bật các dòng dưới nếu muốn chạy mcp_http_server.py (và set MCP_SERVER_MODE=http):
+httpx>=0.27.0
+fastapi>=0.110.0
+uvicorn>=0.27.0
+# mcp>=1.0.0  # optional: real MCP library (không bắt buộc cho lab này)
 
 # ─── Dev/Test ───────────────────────────
 pytest>=8.0.0
