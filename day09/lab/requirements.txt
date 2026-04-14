@@ -36,5 +36,8 @@ fastapi>=0.110.0
 uvicorn>=0.27.0
 # mcp>=1.0.0  # optional: real MCP library (không bắt buộc cho lab này)
 
+# ─── Demo UI ────────────────────────────
+streamlit>=1.35.0
+
 # ─── Dev/Test ───────────────────────────
 pytest>=8.0.0
