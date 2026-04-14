@@ -1,73 +1,127 @@
 """
-eval_trace.py — Trace Evaluation & Comparison
-Sprint 4: Chạy pipeline với test questions, phân tích trace, so sánh single vs multi.
+eval_trace.py — Trace Evaluation & Comparison (Sprint 4)
+
+Owner: Trace & Docs Owner (xem note.md)
 
 Chạy:
-    python eval_trace.py                  # Chạy 15 test questions
-    python eval_trace.py --grading        # Chạy grading questions (sau 17:00)
-    python eval_trace.py --analyze        # Phân tích trace đã có
-    python eval_trace.py --compare        # So sánh single vs multi
+    python eval_trace.py                  # chạy 15 test_questions + analyze + compare
+    python eval_trace.py --grading        # chạy grading_questions (17:00 public)
+    python eval_trace.py --analyze        # chỉ analyze trace đã có
+    python eval_trace.py --compare        # chỉ so sánh single vs multi
 
 Outputs:
-    artifacts/traces/          — trace của từng câu hỏi
-    artifacts/grading_run.jsonl — log câu hỏi chấm điểm
-    artifacts/eval_report.json  — báo cáo tổng kết
+    artifacts/traces/*.json       — một file per question
+    artifacts/grading_run.jsonl   — log grading (nộp cho giảng viên)
+    artifacts/eval_report.json    — so sánh Day 08 vs Day 09
+    artifacts/test_summary.json   — summary chi tiết 15 test questions
 """
 
+from __future__ import annotations
+
+import argparse
 import json
 import os
 import sys
-import argparse
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
-# Import graph
-sys.path.insert(0, os.path.dirname(__file__))
-from graph import run_graph, save_trace
+_PROJECT_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(_PROJECT_ROOT))
+
+from graph import run_graph, save_trace  # noqa: E402
+
+ARTIFACTS_DIR = _PROJECT_ROOT / "artifacts"
+TRACES_DIR = ARTIFACTS_DIR / "traces"
 
 
 # ─────────────────────────────────────────────
-# 1. Run Pipeline on Test Questions
+# 1. Run test questions (15 câu)
 # ─────────────────────────────────────────────
+
+ABSTAIN_SIGNALS = [
+    "không đủ thông tin",
+    "không có trong tài liệu",
+    "insufficient",
+    "cần xác nhận",
+    "local fallback",
+]
+
+
+def _is_abstain(answer: str) -> bool:
+    low = (answer or "").lower()
+    return any(sig in low for sig in ABSTAIN_SIGNALS)
+
+
+def _sources_match(actual: list, expected: list) -> bool:
+    if not expected:
+        return True  # abstain question — sources có/không đều OK
+    actual_set = {s.lower() for s in actual or []}
+    expected_set = {s.lower() for s in expected}
+    return len(actual_set & expected_set) > 0
+
 
 def run_test_questions(questions_file: str = "data/test_questions.json") -> list:
-    """
-    Chạy pipeline với danh sách câu hỏi, lưu trace từng câu.
-
-    Returns:
-        list of (question, result) tuples
-    """
-    with open(questions_file, encoding="utf-8") as f:
+    """Chạy pipeline với test questions, lưu trace từng câu."""
+    q_path = _PROJECT_ROOT / questions_file
+    with open(q_path, encoding="utf-8") as f:
         questions = json.load(f)
 
-    print(f"\n📋 Running {len(questions)} test questions from {questions_file}")
+    print(f"\n📋 Running {len(questions)} test questions from {q_path}")
     print("=" * 60)
 
     results = []
     for i, q in enumerate(questions, 1):
-        question_text = q["question"]
         q_id = q.get("id", f"q{i:02d}")
-
-        print(f"[{i:02d}/{len(questions)}] {q_id}: {question_text[:65]}...")
+        question_text = q["question"]
+        print(f"[{i:02d}/{len(questions)}] {q_id}: {question_text[:60]}...")
 
         try:
             result = run_graph(question_text)
             result["question_id"] = q_id
+            trace_file = save_trace(result, str(TRACES_DIR))
 
-            # Save individual trace
-            trace_file = save_trace(result, f"artifacts/traces")
-            print(f"  ✓ route={result.get('supervisor_route', '?')}, "
-                  f"conf={result.get('confidence', 0):.2f}, "
-                  f"{result.get('latency_ms', 0)}ms")
+            actual_sources = result.get("retrieved_sources", [])
+            expected_sources = q.get("expected_sources", [])
+            expected_route = q.get("expected_route", "")
+            actual_route = result.get("supervisor_route", "")
+            answer = result.get("final_answer", "")
+            abstain = _is_abstain(answer)
+
+            route_ok = (expected_route == actual_route) if expected_route else True
+            sources_ok = _sources_match(actual_sources, expected_sources)
+            abstain_expected = q.get("test_type") == "abstain"
+            abstain_ok = abstain == abstain_expected if abstain_expected else True
+
+            print(
+                f"  ✓ route={actual_route} (expected={expected_route}) "
+                f"conf={result.get('confidence', 0):.2f} "
+                f"{result.get('latency_ms', 0)}ms "
+                f"[route_ok={route_ok} src_ok={sources_ok}]"
+            )
 
             results.append({
                 "id": q_id,
                 "question": question_text,
                 "expected_answer": q.get("expected_answer", ""),
-                "expected_sources": q.get("expected_sources", []),
+                "expected_sources": expected_sources,
+                "expected_route": expected_route,
                 "difficulty": q.get("difficulty", "unknown"),
                 "category": q.get("category", "unknown"),
-                "result": result,
+                "test_type": q.get("test_type", ""),
+                "actual_route": actual_route,
+                "actual_sources": actual_sources,
+                "actual_answer": answer,
+                "confidence": result.get("confidence", 0),
+                "latency_ms": result.get("latency_ms", 0),
+                "workers_called": result.get("workers_called", []),
+                "mcp_tools_used": [t.get("tool") for t in result.get("mcp_tools_used", [])],
+                "hitl_triggered": result.get("hitl_triggered", False),
+                "abstain": abstain,
+                "route_ok": route_ok,
+                "sources_ok": sources_ok,
+                "abstain_ok": abstain_ok,
+                "trace_file": trace_file,
             })
 
         except Exception as e:
@@ -76,34 +130,44 @@ def run_test_questions(questions_file: str = "data/test_questions.json") -> list
                 "id": q_id,
                 "question": question_text,
                 "error": str(e),
-                "result": None,
             })
 
-    print(f"\n✅ Done. {sum(1 for r in results if r.get('result'))} / {len(results)} succeeded.")
+    ok_count = sum(1 for r in results if r.get("actual_route"))
+    print(f"\n✅ Done. {ok_count}/{len(results)} succeeded.")
+
+    # Save summary
+    summary_file = ARTIFACTS_DIR / "test_summary.json"
+    os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+    with open(summary_file, "w", encoding="utf-8") as f:
+        json.dump({
+            "generated_at": datetime.now().isoformat(),
+            "total": len(results),
+            "succeeded": ok_count,
+            "route_accuracy": sum(1 for r in results if r.get("route_ok")) / max(1, len(results)),
+            "source_hit_rate": sum(1 for r in results if r.get("sources_ok")) / max(1, len(results)),
+            "results": results,
+        }, f, ensure_ascii=False, indent=2)
+    print(f"📄 Test summary → {summary_file}")
+
     return results
 
 
 # ─────────────────────────────────────────────
-# 2. Run Grading Questions (Sprint 4)
+# 2. Run grading questions
 # ─────────────────────────────────────────────
 
 def run_grading_questions(questions_file: str = "data/grading_questions.json") -> str:
-    """
-    Chạy pipeline với grading questions và lưu JSONL log.
-    Dùng cho chấm điểm nhóm (chạy sau khi grading_questions.json được public lúc 17:00).
-
-    Returns:
-        path tới grading_run.jsonl
-    """
-    if not os.path.exists(questions_file):
-        print(f"❌ {questions_file} chưa được public (sau 17:00 mới có).")
+    """Chạy pipeline với grading questions và lưu JSONL log."""
+    q_path = _PROJECT_ROOT / questions_file
+    if not q_path.exists():
+        print(f"❌ {q_path} chưa được public (sau 17:00 mới có).")
         return ""
 
-    with open(questions_file, encoding="utf-8") as f:
+    with open(q_path, encoding="utf-8") as f:
         questions = json.load(f)
 
-    os.makedirs("artifacts", exist_ok=True)
-    output_file = "artifacts/grading_run.jsonl"
+    os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+    output_file = ARTIFACTS_DIR / "grading_run.jsonl"
 
     print(f"\n🎯 Running GRADING questions — {len(questions)} câu")
     print(f"   Output → {output_file}")
@@ -113,7 +177,7 @@ def run_grading_questions(questions_file: str = "data/grading_questions.json") -
         for i, q in enumerate(questions, 1):
             q_id = q.get("id", f"gq{i:02d}")
             question_text = q["question"]
-            print(f"[{i:02d}/{len(questions)}] {q_id}: {question_text[:65]}...")
+            print(f"[{i:02d}/{len(questions)}] {q_id}: {question_text[:60]}...")
 
             try:
                 result = run_graph(question_text)
@@ -132,6 +196,9 @@ def run_grading_questions(questions_file: str = "data/grading_questions.json") -
                     "timestamp": datetime.now().isoformat(),
                 }
                 print(f"  ✓ route={record['supervisor_route']}, conf={record['confidence']:.2f}")
+                # Save full trace cho grading câu này
+                save_trace(result, str(TRACES_DIR / "grading"))
+
             except Exception as e:
                 record = {
                     "id": q_id,
@@ -152,49 +219,41 @@ def run_grading_questions(questions_file: str = "data/grading_questions.json") -
             out.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     print(f"\n✅ Grading log saved → {output_file}")
-    return output_file
+    print(f"   ⚠️  Nộp file này trước 18:00!")
+    return str(output_file)
 
 
 # ─────────────────────────────────────────────
-# 3. Analyze Traces
+# 3. Analyze traces
 # ─────────────────────────────────────────────
 
-def analyze_traces(traces_dir: str = "artifacts/traces") -> dict:
-    """
-    Đọc tất cả trace files và tính metrics tổng hợp.
-
-    Metrics:
-    - routing_distribution: % câu đi vào mỗi worker
-    - avg_confidence: confidence trung bình
-    - avg_latency_ms: latency trung bình
-    - mcp_usage_rate: % câu có MCP tool call
-    - hitl_rate: % câu trigger HITL
-    - source_coverage: các tài liệu nào được dùng nhiều nhất
-
-    Returns:
-        dict of metrics
-    """
-    if not os.path.exists(traces_dir):
+def analyze_traces(traces_dir: Path = TRACES_DIR) -> dict:
+    traces_dir = Path(traces_dir)
+    if not traces_dir.exists():
         print(f"⚠️  {traces_dir} không tồn tại. Chạy run_test_questions() trước.")
         return {}
 
-    trace_files = [f for f in os.listdir(traces_dir) if f.endswith(".json")]
+    trace_files = list(traces_dir.glob("*.json"))
     if not trace_files:
         print(f"⚠️  Không có trace files trong {traces_dir}.")
         return {}
 
     traces = []
-    for fname in trace_files:
-        with open(os.path.join(traces_dir, fname)) as f:
-            traces.append(json.load(f))
+    for f in trace_files:
+        try:
+            with open(f, encoding="utf-8") as fh:
+                traces.append(json.load(fh))
+        except Exception as e:
+            print(f"⚠️  Skip {f.name}: {e}")
 
-    # Compute metrics
-    routing_counts = {}
+    routing_counts: dict = {}
     confidences = []
     latencies = []
     mcp_calls = 0
     hitl_triggers = 0
-    source_counts = {}
+    source_counts: dict = {}
+    worker_co_call = {"retrieval_only": 0, "policy_only": 0, "both": 0, "none": 0}
+    abstain_count = 0
 
     for t in traces:
         route = t.get("supervisor_route", "unknown")
@@ -208,96 +267,124 @@ def analyze_traces(traces_dir: str = "artifacts/traces") -> dict:
         if lat:
             latencies.append(lat)
 
+        workers = t.get("workers_called", [])
+        has_retrieval = "retrieval_worker" in workers
+        has_policy = "policy_tool_worker" in workers
+        if has_retrieval and has_policy:
+            worker_co_call["both"] += 1
+        elif has_retrieval:
+            worker_co_call["retrieval_only"] += 1
+        elif has_policy:
+            worker_co_call["policy_only"] += 1
+        else:
+            worker_co_call["none"] += 1
+
         if t.get("mcp_tools_used"):
             mcp_calls += 1
 
         if t.get("hitl_triggered"):
             hitl_triggers += 1
 
+        if _is_abstain(t.get("final_answer", "")):
+            abstain_count += 1
+
         for src in t.get("retrieved_sources", []):
             source_counts[src] = source_counts.get(src, 0) + 1
 
     total = len(traces)
-    metrics = {
+    pct = lambda x: f"{x}/{total} ({round(100 * x / total, 1)}%)" if total else "0"
+
+    return {
         "total_traces": total,
-        "routing_distribution": {k: f"{v}/{total} ({100*v//total}%)" for k, v in routing_counts.items()},
+        "routing_distribution": {k: pct(v) for k, v in routing_counts.items()},
+        "worker_co_call": {k: pct(v) for k, v in worker_co_call.items()},
         "avg_confidence": round(sum(confidences) / len(confidences), 3) if confidences else 0,
+        "min_confidence": round(min(confidences), 3) if confidences else 0,
+        "max_confidence": round(max(confidences), 3) if confidences else 0,
         "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else 0,
-        "mcp_usage_rate": f"{mcp_calls}/{total} ({100*mcp_calls//total}%)" if total else "0%",
-        "hitl_rate": f"{hitl_triggers}/{total} ({100*hitl_triggers//total}%)" if total else "0%",
+        "p95_latency_ms": (
+            sorted(latencies)[int(0.95 * len(latencies))] if len(latencies) >= 20 else
+            (max(latencies) if latencies else 0)
+        ),
+        "mcp_usage_rate": pct(mcp_calls),
+        "hitl_rate": pct(hitl_triggers),
+        "abstain_rate": pct(abstain_count),
         "top_sources": sorted(source_counts.items(), key=lambda x: -x[1])[:5],
     }
 
-    return metrics
-
 
 # ─────────────────────────────────────────────
-# 4. Compare Single vs Multi Agent
+# 4. Compare single vs multi
 # ─────────────────────────────────────────────
 
 def compare_single_vs_multi(
-    multi_traces_dir: str = "artifacts/traces",
+    multi_traces_dir: Path = TRACES_DIR,
     day08_results_file: Optional[str] = None,
 ) -> dict:
-    """
-    So sánh Day 08 (single agent RAG) vs Day 09 (multi-agent).
-
-    TODO Sprint 4: Điền kết quả thực tế từ Day 08 vào day08_baseline.
-
-    Returns:
-        dict của comparison metrics
-    """
     multi_metrics = analyze_traces(multi_traces_dir)
 
-    # TODO: Load Day 08 results nếu có
-    # Nếu không có, dùng baseline giả lập để format
+    # Day 08 baseline — điền thủ công hoặc load từ file
     day08_baseline = {
         "total_questions": 15,
-        "avg_confidence": 0.0,          # TODO: Điền từ Day 08 eval.py
-        "avg_latency_ms": 0,            # TODO: Điền từ Day 08
-        "abstain_rate": "?",            # TODO: Điền từ Day 08
-        "multi_hop_accuracy": "?",      # TODO: Điền từ Day 08
+        "avg_confidence": None,
+        "avg_latency_ms": None,
+        "abstain_rate": None,
+        "routing_visibility": "N/A — single agent không có concept routing",
+        "debuggability": "Low — khó isolate bug vì monolithic prompt",
+        "note": "Để cập nhật thực tế, chạy day08 eval và điền vào file day08_results.json.",
     }
 
-    if day08_results_file and os.path.exists(day08_results_file):
-        with open(day08_results_file) as f:
-            day08_baseline = json.load(f)
+    if day08_results_file:
+        p = Path(day08_results_file)
+        if p.exists():
+            with open(p) as f:
+                day08_baseline.update(json.load(f))
 
-    comparison = {
+    # Delta analysis
+    analysis = {
+        "routing_visibility": "Day 09 có route_reason cho từng câu → dễ debug hơn Day 08.",
+        "debuggability": (
+            "Multi-agent có thể test từng worker độc lập (python workers/retrieval.py, "
+            "policy_tool.py, synthesis.py). Single-agent phải chạy toàn pipeline để debug."
+        ),
+        "mcp_benefit": (
+            "Day 09 extend capability qua MCP (thêm tool mới không sửa core). "
+            "Day 08 phải hard-code API calls vào prompt/pipeline."
+        ),
+        "trace_richness": (
+            f"Day 09 trace có {len(multi_metrics.get('routing_distribution', {}))} routes, "
+            f"{multi_metrics.get('mcp_usage_rate', 'N/A')} MCP usage, "
+            f"{multi_metrics.get('hitl_rate', 'N/A')} HITL. "
+            "Day 08 chỉ có final answer + retrieved_docs."
+        ),
+        "latency_cost": (
+            f"Day 09 avg latency {multi_metrics.get('avg_latency_ms', 'N/A')}ms — "
+            "cao hơn single-agent vì extra supervisor + policy node, "
+            "nhưng bù lại có thể cache retrieval riêng."
+        ),
+    }
+
+    return {
         "generated_at": datetime.now().isoformat(),
         "day08_single_agent": day08_baseline,
         "day09_multi_agent": multi_metrics,
-        "analysis": {
-            "routing_visibility": "Day 09 có route_reason cho từng câu → dễ debug hơn Day 08",
-            "latency_delta": "TODO: Điền delta latency thực tế",
-            "accuracy_delta": "TODO: Điền delta accuracy thực tế từ grading",
-            "debuggability": "Multi-agent: có thể test từng worker độc lập. Single-agent: không thể.",
-            "mcp_benefit": "Day 09 có thể extend capability qua MCP không cần sửa core. Day 08 phải hard-code.",
-        },
+        "analysis": analysis,
     }
 
-    return comparison
-
-
-# ─────────────────────────────────────────────
-# 5. Save Eval Report
-# ─────────────────────────────────────────────
 
 def save_eval_report(comparison: dict) -> str:
-    """Lưu báo cáo eval tổng kết ra file JSON."""
-    os.makedirs("artifacts", exist_ok=True)
-    output_file = "artifacts/eval_report.json"
+    os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+    output_file = ARTIFACTS_DIR / "eval_report.json"
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(comparison, f, ensure_ascii=False, indent=2)
-    return output_file
+    return str(output_file)
 
 
 # ─────────────────────────────────────────────
-# 6. CLI Entry Point
+# 5. CLI
 # ─────────────────────────────────────────────
 
 def print_metrics(metrics: dict):
-    """Print metrics đẹp."""
     if not metrics:
         return
     print("\n📊 Trace Analysis:")
@@ -320,40 +407,36 @@ if __name__ == "__main__":
     parser.add_argument("--analyze", action="store_true", help="Analyze existing traces")
     parser.add_argument("--compare", action="store_true", help="Compare single vs multi")
     parser.add_argument("--test-file", default="data/test_questions.json", help="Test questions file")
+    parser.add_argument("--day08", default=None, help="Path to day08_results.json for comparison")
     args = parser.parse_args()
 
     if args.grading:
-        # Chạy grading questions
         log_file = run_grading_questions()
         if log_file:
             print(f"\n✅ Grading log: {log_file}")
-            print("   Nộp file này trước 18:00!")
 
     elif args.analyze:
-        # Phân tích traces
         metrics = analyze_traces()
         print_metrics(metrics)
 
     elif args.compare:
-        # So sánh single vs multi
-        comparison = compare_single_vs_multi()
+        comparison = compare_single_vs_multi(day08_results_file=args.day08)
         report_file = save_eval_report(comparison)
         print(f"\n📊 Comparison report saved → {report_file}")
-        print("\n=== Day 08 vs Day 09 ===")
+        print("\n=== Day 08 vs Day 09 — Analysis ===")
         for k, v in comparison.get("analysis", {}).items():
-            print(f"  {k}: {v}")
+            print(f"  [{k}] {v}")
 
     else:
-        # Default: chạy test questions
-        results = run_test_questions(args.test_file)
-
-        # Phân tích trace
+        # Default: end-to-end
+        run_test_questions(args.test_file)
         metrics = analyze_traces()
         print_metrics(metrics)
-
-        # Lưu báo cáo
-        comparison = compare_single_vs_multi()
+        comparison = compare_single_vs_multi(day08_results_file=args.day08)
         report_file = save_eval_report(comparison)
         print(f"\n📄 Eval report → {report_file}")
         print("\n✅ Sprint 4 complete!")
-        print("   Next: Điền docs/ templates và viết reports/")
+        print("   Next steps:")
+        print("     1. Điền docs/system_architecture.md, routing_decisions.md, single_vs_multi_comparison.md")
+        print("     2. Sau 17:00: python eval_trace.py --grading")
+        print("     3. Sau 18:00: viết reports/group_report.md + reports/individual/[ten].md")
