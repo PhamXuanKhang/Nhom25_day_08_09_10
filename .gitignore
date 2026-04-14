@@ -11,3 +11,4 @@ day08/lab/chroma_db/
 day08/lab/__pycache__/
 
 .env
+.vscode/mcp.json
