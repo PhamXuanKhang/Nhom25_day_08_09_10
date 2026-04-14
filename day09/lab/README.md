@@ -94,29 +94,37 @@ cp .env.example .env
 # Điền OPENAI_API_KEY hoặc GOOGLE_API_KEY
 ```
 
-### 3. Build index từ Day 08 (nếu chưa có)
+### 3. Build ChromaDB index (bắt buộc trước lần chạy đầu tiên)
 ```bash
-# Copy ChromaDB index từ Day 08, hoặc chạy lại:
-python -c "
-import chromadb, os
-from sentence_transformers import SentenceTransformer
-
-client = chromadb.PersistentClient(path='./chroma_db')
-col = client.get_or_create_collection('day09_docs')
-model = SentenceTransformer('all-MiniLM-L6-v2')
-
-docs_dir = './data/docs'
-for fname in os.listdir(docs_dir):
-    with open(os.path.join(docs_dir, fname)) as f:
-        content = f.read()
-    print(f'Indexed: {fname}')
-print('Index ready.')
-"
+python setup_index.py
 ```
 
-### 4. Kiểm tra setup
+Script này:
+- Đọc toàn bộ `.txt` trong `data/docs/` (5 files)
+- Chunk theo section markers `=== ... ===`
+- Embed bằng SentenceTransformer `all-MiniLM-L6-v2` (offline)
+- Ghi vào `./chroma_db` (collection `day09_docs`)
+- Idempotent — chạy lại xóa + rebuild
+
+### 4. Kiểm tra setup end-to-end
 ```bash
-python graph.py  # Chạy 1 test query cơ bản
+python mcp_server.py         # Smoke test 4 MCP tools
+python workers/retrieval.py  # Smoke test retrieval
+python workers/policy_tool.py  # Smoke test policy + MCP integration
+python workers/synthesis.py  # Smoke test synthesis (cần API key để gọi LLM thật)
+python graph.py              # Smoke test graph với 4 test queries
+python eval_trace.py         # Chạy 15 test questions, sinh trace + eval_report
+```
+
+### 5. (Bonus +2) Chạy MCP qua HTTP server
+```bash
+# Terminal 1 — start server
+pip install fastapi uvicorn httpx
+python mcp_http_server.py    # :8080
+
+# Terminal 2 — set mode
+export MCP_SERVER_MODE=http   # Windows PowerShell: $env:MCP_SERVER_MODE="http"
+python graph.py               # policy_tool sẽ gọi MCP qua httpx
 ```
 
 ---
