@@ -1,0 +1,62 @@
+{
+  "generated_at": "2026-04-14T16:53:06.670750",
+  "day08_single_agent": {
+    "total_questions": 15,
+    "avg_confidence": null,
+    "avg_latency_ms": null,
+    "abstain_rate": null,
+    "routing_visibility": "N/A — single agent không có concept routing",
+    "debuggability": "Low — khó isolate bug vì monolithic prompt",
+    "note": "Để cập nhật thực tế, chạy day08 eval và điền vào file day08_results.json."
+  },
+  "day09_multi_agent": {
+    "total_traces": 15,
+    "routing_distribution": {
+      "retrieval_worker": "8/15 (53.3%)",
+      "policy_tool_worker": "7/15 (46.7%)"
+    },
+    "worker_co_call": {
+      "retrieval_only": "8/15 (53.3%)",
+      "policy_only": "0/15 (0.0%)",
+      "both": "7/15 (46.7%)",
+      "none": "0/15 (0.0%)"
+    },
+    "avg_confidence": 0.697,
+    "min_confidence": 0.33,
+    "max_confidence": 0.82,
+    "avg_latency_ms": 3106,
+    "p95_latency_ms": 6248,
+    "mcp_usage_rate": "3/15 (20.0%)",
+    "hitl_rate": "1/15 (6.7%)",
+    "abstain_rate": "3/15 (20.0%)",
+    "top_sources": [
+      [
+        "access_control_sop.txt",
+        7
+      ],
+      [
+        "sla_p1_2026.txt",
+        6
+      ],
+      [
+        "policy_refund_v4.txt",
+        4
+      ],
+      [
+        "hr_leave_policy.txt",
+        3
+      ],
+      [
+        "it_helpdesk_faq.txt",
+        2
+      ]
+    ]
+  },
+  "analysis": {
+    "routing_visibility": "Day 09 có route_reason cho từng câu → dễ debug hơn Day 08.",
+    "debuggability": "Multi-agent có thể test từng worker độc lập (python workers/retrieval.py, policy_tool.py, synthesis.py). Single-agent phải chạy toàn pipeline để debug.",
+    "mcp_benefit": "Day 09 extend capability qua MCP (thêm tool mới không sửa core). Day 08 phải hard-code API calls vào prompt/pipeline.",
+    "trace_richness": "Day 09 trace có 2 routes, 3/15 (20.0%) MCP usage, 1/15 (6.7%) HITL. Day 08 chỉ có final answer + retrieved_docs.",
+    "latency_cost": "Day 09 avg latency 3106ms — cao hơn single-agent vì extra supervisor + policy node, nhưng bù lại có thể cache retrieval riêng."
+  }
+}
