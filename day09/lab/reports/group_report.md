@@ -15,6 +15,21 @@
 
 ---
 
+**Tên nhóm:** Nhóm 25  
+**Thành viên:**
+| Tên | Vai trò | Email |
+|-----|---------|-------|
+| Phạm Xuân Khang | Supervisor Owner | khang.px@vinuni.edu.vn |
+| Phạm Thành Duy | Worker Owner | duy.pt@vinuni.edu.vn |
+| Văn Thức | MCP Owner | thuc.v@vinuni.edu.vn |
+| Nguyễn Thị Thu | Trace & Docs Owner | thu.nt@vinuni.edu.vn |
+
+**Ngày nộp:** 2026-04-14  
+**Repo:** https://github.com/PhamXuanKhang/Nhom25_day_08_09_10  
+**Độ dài khuyến nghị:** 600–1000 từ
+
+---
+
 ## 1. Kiến trúc nhóm đã xây dựng (150–200 từ)
 
 **Hệ thống tổng quan:**
@@ -36,7 +51,7 @@ Supervisor dùng keyword matching theo 3 bảng: `POLICY_KEYWORDS` (hoàn tiền
 
 ---
 
-## 2. Quyết định kỹ thuật quan trọng nhất (200–250 từ)
+## 2. Quyết định kỹ thuật quan trọng nhất 
 
 **Quyết định:** Dùng keyword-based routing thuần Python thay vì LLM classifier để supervisor quyết định route
 
@@ -69,13 +84,15 @@ route_reason: "matches policy/access keywords: ['cấp quyền', 'level 3'] |
                multi-hop SLA+access → policy_tool_worker with MCP"
 workers_called: ["retrieval_worker", "policy_tool_worker", "synthesis_worker"]
 mcp_tools_used: ["check_access_permission", "get_ticket_info"]
-```
+
 
 Route accuracy đạt 93.3% (14/15) với keyword approach. Câu duy nhất route sai là q02 ("Khách hàng có thể yêu cầu hoàn tiền trong bao nhiêu ngày?" — route thành `policy_tool_worker` thay vì `retrieval_worker` vì keyword "hoàn tiền"), nhưng answer vẫn đúng vì source_hit_rate = 100%.
 
----
 
-## 3. Kết quả grading questions (150–200 từ)
+
+## 3. Kết quả grading questions 
+
+**Tổng điểm raw ước tính:** Dựa trên 15 test questions — route_accuracy 93.3%, source_hit_rate 100%, avg_confidence 0.70.
 
 **Tổng điểm raw ước tính:** Dựa trên 15 test questions — route_accuracy 93.3%, source_hit_rate 100%, avg_confidence 0.70.
 
@@ -87,7 +104,31 @@ Từ `artifacts/grading_run.jsonl` đã chạy sau 17:00:
 **Câu pipeline fail hoặc partial:**
 - ID: q14 — Abstain sai. Câu hỏi về nhân viên probation, answer đúng là "KHÔNG được remote" nhưng pipeline trả "Không đủ thông tin". Root cause: retrieval worker không tìm được chunk chứa nội dung cấm probation period làm remote, chunking section-based đã tách nội dung này vào sub-chunk không đủ context.
 
+
 **Câu gq07 (abstain):** Pipeline xử lý đúng — keyword "phạt tài chính" không có trong POLICY_KEYWORDS nên route sang `retrieval_worker`. ChromaDB không tìm được chunk về mức phạt tài chính vi phạm SLA, synthesis abstain với "Không đủ thông tin trong tài liệu nội bộ." — đúng hành vi, tránh hallucinate.
+
+
+**Câu gq07 (abstain):** Pipeline xử lý đúng — keyword "phạt tài chính" không có trong POLICY_KEYWORDS nên route sang `retrieval_worker`. ChromaDB không tìm được chunk về mức phạt tài chính vi phạm SLA, synthesis abstain với "Không đủ thông tin trong tài liệu nội bộ." — đúng hành vi, tránh hallucinate.
+
+**Câu gq09 (multi-hop khó nhất):** Trace ghi đủ 2 workers — `retrieval_worker` + `policy_tool_worker`, và gọi cả `check_access_permission` + `get_ticket_info`. Answer đầy đủ cross-reference giữa 2 documents.
+
+---
+
+## 4. So sánh Day 08 vs Day 09 — Điều nhóm quan sát được 
+
+**Metric thay đổi rõ nhất (có số liệu):**
+
+Day09 có observability rõ rệt: route accuracy `93.33%`, MCP usage `20.0%` (`3/15`), HITL `6.7%` (`1/15`), avg latency `3106ms` (nguồn: `artifacts/eval_report.json`, `artifacts/test_summary.json`). Day08 không có trường route/worker-level trace nên không đo trực tiếp routing quality.
+
+**Điều nhóm bất ngờ nhất khi chuyển từ single sang multi-agent:**
+
+Giá trị lớn nhất không phải tăng chất lượng trả lời tuyệt đối, mà là khả năng xác định lỗi nhanh. Với Day09, chỉ cần mở trace là biết lỗi thuộc route, retrieval, policy hay synthesis; trước đó Day08 phải đọc toàn pipeline để đoán nguyên nhân.
+
+**Trường hợp multi-agent KHÔNG giúp ích hoặc làm chậm hệ thống:**
+
+Với câu hỏi fact đơn giản, multi-agent không cải thiện mạnh độ đúng nhưng vẫn tốn orchestration overhead (supervisor + worker chain), làm latency cao hơn so với kỳ vọng single flow. Ngoài ra rule-based routing vẫn có 1 false route (q02), cho thấy multi-agent chưa tự động tốt nếu tầng routing chưa đủ tinh.
+
+---
 
 **Câu gq09 (multi-hop khó nhất):** Trace ghi đủ 2 workers — `retrieval_worker` + `policy_tool_worker`, và gọi cả `check_access_permission` + `get_ticket_info`. Answer đầy đủ cross-reference giữa 2 documents.
 
@@ -114,6 +155,7 @@ Câu q01, q04, q05 (single-doc, easy): supervisor + routing overhead thêm ~100-
 
 ## 5. Phân công và đánh giá nhóm (100–150 từ)
 
+
 **Phân công thực tế:**
 
 | Thành viên | Phần đã làm | Sprint |
@@ -135,10 +177,15 @@ Embedding model ban đầu dùng SentenceTransformer local (MiniLM), phải refa
 
 Định nghĩa embedding model và ChromaDB schema trước khi bắt đầu Sprint 2 — để retrieval và indexing không phải sync lại sau khi đã implement xong.
 
+
 ---
 
-## 6. Nếu có thêm 1 ngày, nhóm sẽ làm gì? (50–100 từ)
+## 6. Nếu có thêm 1 ngày, nhóm sẽ làm gì?
 
+**Cải tiến 1:** Thêm LLM-as-Judge để đánh giá confidence (bonus +1 theo SCORING.md). Hiện tại confidence = heuristic `weighted_avg(chunk_scores) - penalties`. Trace câu q14 (confidence=0.54 nhưng abstain sai) cho thấy công thức chưa đủ tinh tế — LLM judge có thể cross-check answer vs chunks để phát hiện mismatch.
+
+**Cải tiến 2:** Cache retrieval result cho câu trùng topic (q01 và gq05 đều hỏi SLA P1) — giảm 30-40% latency khi batch grading qua cosine similarity threshold trên query embedding.
+=======
 **Cải tiến 1:** Thêm LLM-as-Judge để đánh giá confidence (bonus +1 theo SCORING.md). Hiện tại confidence = heuristic `weighted_avg(chunk_scores) - penalties`. Trace câu q14 (confidence=0.54 nhưng abstain sai) cho thấy công thức chưa đủ tinh tế — LLM judge có thể cross-check answer vs chunks để phát hiện mismatch.
 
 **Cải tiến 2:** Cache retrieval result cho câu trùng topic (q01 và gq05 đều hỏi SLA P1) — giảm 30-40% latency khi batch grading qua cosine similarity threshold trên query embedding.
