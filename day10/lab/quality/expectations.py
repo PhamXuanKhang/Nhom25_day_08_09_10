@@ -27,6 +27,26 @@ def run_expectations(cleaned_rows: List[Dict[str, Any]]) -> Tuple[List[Expectati
     """
     results: List[ExpectationResult] = []
 
+    # E1: Max length
+    long_chunks = [r for r in cleaned_rows if len((r.get("chunk_text") or "")) > 5000]
+    results.append(ExpectationResult(
+        "chunk_max_length_5000",
+        len(long_chunks) == 0,
+        "warn",
+        f"over_limit={len(long_chunks)}"
+    ))
+    
+
+    # E2: exported_at consistency
+    exported_times = set(r.get("exported_at") for r in cleaned_rows if r.get("exported_at"))
+    consistent = len(exported_times) <= 1
+    results.append(ExpectationResult(
+        "exported_at_consistency",
+        consistent,
+        "warn",
+        f"unique_timestamps={len(exported_times)}"
+    ))
+
     # E1: có ít nhất 1 dòng sau clean
     ok = len(cleaned_rows) >= 1
     results.append(

@@ -41,13 +41,22 @@ _________________
 
 ### 2a. Bảng metric_impact (bắt buộc — chống trivial)
 
-| Rule / Expectation mới (tên ngắn) | Trước (số liệu) | Sau / khi inject (số liệu) | Chứng cứ (log / CSV / commit) |
-|-----------------------------------|------------------|-----------------------------|-------------------------------|
-| … | … | … | … |
+| Rule / Expectation mới | Metric | Trước | Sau (sprint2-v1) | Chứng cứ |
+|---|---|---|---|---|
+| **R1: contains_test_markers** | quarantine_records với marker | 4 (chưa có rule) | 4 (không tìm thấy marker) | `run_sprint2-v1.log` |
+| **R2: strip_trailing_whitespace** | improved dedupe accuracy | 10 raw chunks | 6 cleaned (dedupe tốt hơn) | `cleaned_sprint2-v1.csv` |
+| **R3: missing_sla_keyword** | quarantine_records (SLA invalid) | 4 (baseline) | 4 (SLA chunk có keyword) | `quarantine_sprint2-v1.csv` |
+| **E1: chunk_max_length_5000** | over_limit = 0 | - | 0 violations | `run_sprint2-v1.log`: `over_limit=0` |
+| **E2: exported_at_consistency** | unique_timestamps | - | 1 timestamp | `run_sprint2-v1.log`: `unique_timestamps=1` |
+
+**Run ID:** `sprint2-v1`  
+**Artifacts:** `artifacts/manifests/manifest_sprint2-v1.json`, `artifacts/logs/run_sprint2-v1.log`  
+**Pipeline Exit Code:** 0 ✅
 
 **Rule chính (baseline + mở rộng):**
 
-- …
+- **Baseline 6 rules:** allowlist doc_id, normalize effective_date, quarantine stale HR (< 2026-01-01), missing chunk_text, dedupe, fix refund window (14→7)
+- **Sprint 2 — 3 rules mới:** contains_test_markers, strip_trailing_whitespace, missing_sla_keyword
 
 **Ví dụ 1 lần expectation fail (nếu có) và cách xử lý:**
 

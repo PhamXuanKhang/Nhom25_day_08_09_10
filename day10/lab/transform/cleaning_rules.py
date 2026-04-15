@@ -75,8 +75,10 @@ def clean_rows(
     2) Chuẩn hoá effective_date sang YYYY-MM-DD; quarantine nếu không parse được.
     3) Quarantine: chunk hr_leave_policy có effective_date < 2026-01-01 (bản HR cũ / conflict version).
     4) Quarantine: chunk_text rỗng hoặc effective_date rỗng sau chuẩn hoá.
-    5) Loại trùng nội dung chunk_text (giữ bản đầu).
-    6) Fix stale refund: policy_refund_v4 chứa '14 ngày làm việc' → 7 ngày.
+    5) Quarantine: chunk chứa test markers [TEST], [DRAFT] (New Rule 1 — Sprint 2).
+    6) Loại trùng nội dung chunk_text (giữ bản đầu).
+    7) Strip trailing whitespace + validate SLA keyword (New Rules 2-3 — Sprint 2).
+    8) Fix stale refund: policy_refund_v4 chứa '14 ngày làm việc' → 7 ngày.
     """
     quarantine: List[Dict[str, Any]] = []
     seen_text: set[str] = set()
@@ -115,11 +117,25 @@ def clean_rows(
             quarantine.append({**raw, "reason": "missing_chunk_text"})
             continue
 
+        # NEW Rule 2 (Sprint 2): Strip trailing whitespace — chuẩn hoá text trước dedupe
+        text = text.rstrip()
+
+        # NEW Rule 1 (Sprint 2): Reject test data markers — quarantine [TEST], [DRAFT] chunks
+        if "[TEST]" in text or "[DRAFT]" in text:
+            quarantine.append({**raw, "reason": "contains_test_markers"})
+            continue
+
         key = _norm_text(text)
         if key in seen_text:
             quarantine.append({**raw, "reason": "duplicate_chunk_text"})
             continue
         seen_text.add(key)
+
+        # NEW Rule 3 (Sprint 2): Validate SLA content — policy SLA phải chứa keyword "SLA"
+        if doc_id == "sla_p1_2026":
+            if "SLA" not in text:
+                quarantine.append({**raw, "reason": "missing_sla_keyword"})
+                continue
 
         fixed_text = text
         if apply_refund_window_fix and doc_id == "policy_refund_v4":
