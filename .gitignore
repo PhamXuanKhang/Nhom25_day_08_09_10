@@ -14,7 +14,11 @@ day09/lab/chroma_db/
 day09/lab/__pycache__/
 day09/lab/workers/__pycache__/
 
+day10/lab/chroma_db/
+day10/lab/__pycache__/
+
 day09/lab/note.md
+day10/lab/note.md
 .env
 .vscode/mcp.json
 day10/lab/note.md
