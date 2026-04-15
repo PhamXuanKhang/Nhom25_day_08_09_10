@@ -1,6 +1,6 @@
 {
   "run_id": "inject-bad",
-  "run_timestamp": "2026-04-15T09:55:53.975960+00:00",
+  "run_timestamp": "2026-04-15T10:25:42.008119+00:00",
   "raw_path": "data\\raw\\policy_export_dirty.csv",
   "raw_records": 10,
   "cleaned_records": 6,
