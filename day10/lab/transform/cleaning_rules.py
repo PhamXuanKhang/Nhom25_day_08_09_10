@@ -2,7 +2,11 @@
 Cleaning rules — raw export → cleaned rows + quarantine.
 
 Baseline gồm các failure mode mở rộng (allowlist doc_id, parse ngày, HR stale version).
-Sinh viên thêm ≥3 rule mới: mỗi rule phải ghi `metric_impact` (xem README — chống trivial).
+Các rule nhóm đã thêm (metric_impact ghi ở reports/group_report.md):
+  R7 strip_invisible_chars: loại BOM/zero-width khỏi chunk_text trước khi so sánh dedupe.
+  R8 quarantine_future_effective_date: effective_date xa hơn cutoff tương lai → quarantine.
+  R9 quarantine_chunk_too_long: chunk_text > MAX_CHUNK_LEN → quarantine (tránh context dài bất thường).
+  R10 normalize_policy_version_marker: thay "policy-v3" trong refund v4 → "policy-v4".
 """
 
 from __future__ import annotations
@@ -10,6 +14,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import re
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -25,6 +30,24 @@ ALLOWED_DOC_IDS = frozenset(
 
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _DMY_SLASH = re.compile(r"^(\d{2})/(\d{2})/(\d{4})$")
+
+# Giới hạn chunk — giữ thấp để lab có thể quarantine inject chunk quá dài.
+MAX_CHUNK_LEN = 2000
+
+# Cutoff tương lai: effective_date xa hơn today + 2 năm coi là lỗi export.
+FUTURE_DATE_SLACK_DAYS = 365 * 2
+
+# Ký tự "tàng hình" hay gặp khi export sai encoding.
+_INVISIBLE_CHARS = ("\ufeff", "\u200b", "\u200c", "\u200d", "\u00a0")
+
+
+def _strip_invisible(s: str) -> str:
+    """R7: loại BOM/zero-width space/nbsp để dedupe + expectation length chính xác."""
+    if not s:
+        return s
+    for ch in _INVISIBLE_CHARS:
+        s = s.replace(ch, "")
+    return s
 
 
 def _norm_text(s: str) -> str:
@@ -77,15 +100,24 @@ def clean_rows(
     4) Quarantine: chunk_text rỗng hoặc effective_date rỗng sau chuẩn hoá.
     5) Loại trùng nội dung chunk_text (giữ bản đầu).
     6) Fix stale refund: policy_refund_v4 chứa '14 ngày làm việc' → 7 ngày.
+
+    Rule nhóm mở rộng:
+    R7) Strip ký tự tàng hình (BOM, zero-width) trong chunk_text trước dedupe.
+    R8) Quarantine nếu effective_date > today + FUTURE_DATE_SLACK_DAYS (typo export).
+    R9) Quarantine nếu chunk_text dài bất thường (> MAX_CHUNK_LEN).
+    R10) Normalize marker version trong refund v4: "policy-v3" → "policy-v4".
     """
     quarantine: List[Dict[str, Any]] = []
     seen_text: set[str] = set()
     cleaned: List[Dict[str, Any]] = []
     seq = 0
+    today = date.today()
+    future_cutoff = today + timedelta(days=FUTURE_DATE_SLACK_DAYS)
 
     for raw in rows:
         doc_id = raw.get("doc_id", "")
-        text = raw.get("chunk_text", "")
+        # R7: strip invisible chars ngay khi đọc (ảnh hưởng cả dedupe + length expectation).
+        text = _strip_invisible(raw.get("chunk_text", ""))
         eff_raw = raw.get("effective_date", "")
         exported_at = raw.get("exported_at", "")
 
@@ -99,6 +131,22 @@ def clean_rows(
             continue
         if eff_err == "invalid_effective_date_format":
             quarantine.append({**raw, "reason": eff_err, "effective_date_raw": eff_raw})
+            continue
+
+        # R8: effective_date không được xa tương lai (lỗi export kiểu 2099-01-01).
+        try:
+            eff_d = date.fromisoformat(eff_norm)
+            if eff_d > future_cutoff:
+                quarantine.append(
+                    {
+                        **raw,
+                        "reason": "future_effective_date",
+                        "effective_date_normalized": eff_norm,
+                    }
+                )
+                continue
+        except ValueError:
+            quarantine.append({**raw, "reason": "invalid_effective_date_format", "effective_date_raw": eff_raw})
             continue
 
         if doc_id == "hr_leave_policy" and eff_norm < "2026-01-01":
@@ -115,6 +163,17 @@ def clean_rows(
             quarantine.append({**raw, "reason": "missing_chunk_text"})
             continue
 
+        # R9: chunk quá dài → quarantine (tránh context bất thường làm bẩn top-k).
+        if len(text) > MAX_CHUNK_LEN:
+            quarantine.append(
+                {
+                    **raw,
+                    "reason": "chunk_too_long",
+                    "chunk_len": len(text),
+                }
+            )
+            continue
+
         key = _norm_text(text)
         if key in seen_text:
             quarantine.append({**raw, "reason": "duplicate_chunk_text"})
@@ -129,6 +188,10 @@ def clean_rows(
                     "7 ngày làm việc",
                 )
                 fixed_text += " [cleaned: stale_refund_window]"
+
+        # R10: normalize marker version cũ còn sót trong refund v4.
+        if doc_id == "policy_refund_v4" and "policy-v3" in fixed_text:
+            fixed_text = fixed_text.replace("policy-v3", "policy-v4")
 
         seq += 1
         cleaned.append(

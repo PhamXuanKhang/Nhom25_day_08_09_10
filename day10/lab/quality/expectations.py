@@ -112,5 +112,48 @@ def run_expectations(cleaned_rows: List[Dict[str, Any]]) -> Tuple[List[Expectati
         )
     )
 
+    # E7 (mở rộng): chunk_id phải duy nhất sau clean (upsert Chroma chống trùng ID).
+    ids = [r.get("chunk_id") or "" for r in cleaned_rows]
+    dup_ids = len(ids) - len(set(ids))
+    ok7 = dup_ids == 0
+    results.append(
+        ExpectationResult(
+            "chunk_id_unique",
+            ok7,
+            "halt",
+            f"duplicate_chunk_ids={dup_ids}",
+        )
+    )
+
+    # E8 (mở rộng): mỗi doc_id trong allowlist phải có ít nhất 1 chunk publish được.
+    required_docs = {"policy_refund_v4", "sla_p1_2026", "it_helpdesk_faq", "hr_leave_policy"}
+    seen_docs = {r.get("doc_id") for r in cleaned_rows}
+    missing_docs = sorted(required_docs - seen_docs)
+    ok8 = len(missing_docs) == 0
+    results.append(
+        ExpectationResult(
+            "all_required_docs_present",
+            ok8,
+            "warn",
+            f"missing_docs={missing_docs}",
+        )
+    )
+
+    # E9 (mở rộng): không có ký tự tàng hình trong chunk_text (BOM/zero-width) sau clean.
+    invisible = [
+        r
+        for r in cleaned_rows
+        if any(ch in (r.get("chunk_text") or "") for ch in ("\ufeff", "\u200b", "\u200c", "\u200d"))
+    ]
+    ok9 = len(invisible) == 0
+    results.append(
+        ExpectationResult(
+            "no_invisible_chars",
+            ok9,
+            "warn",
+            f"invisible_char_rows={len(invisible)}",
+        )
+    )
+
     halt = any(not r.passed and r.severity == "halt" for r in results)
     return results, halt
